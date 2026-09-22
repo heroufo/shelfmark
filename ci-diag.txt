@@ -1,0 +1,47 @@
+env: python=3.13.15 platform=win32 files=18 stdlib_names=290 root=D:\a\shelfmark\shelfmark
+-- file fingerprints (md5/bytes/crlf/lf/bom) --
+   app.py                             92bb49e394f9  10924 crlf=0    lf=319  bom=0
+   export_data.py                     82c5821a9cb0   3893 crlf=0    lf=101  bom=0
+   shelfmark\__init__.py              5cd9c03a0a32   1350 crlf=0    lf=29   bom=0
+   shelfmark\books.py                 a52adb087943   9977 crlf=0    lf=237  bom=0
+   shelfmark\dialogs.py               9d43d5768215  10730 crlf=0    lf=281  bom=0
+   shelfmark\metadata.py              3c547147d24b   9488 crlf=0    lf=246  bom=0
+   shelfmark\nationality.py           c6acf227bea2   5410 crlf=0    lf=107  bom=0
+   shelfmark\paths.py                 9cbfa7f3e327   3515 crlf=0    lf=70   bom=0
+   shelfmark\publishing.py            9ad1e918c057   1792 crlf=0    lf=49   bom=0
+   shelfmark\storage.py               c55220fb929f   6067 crlf=0    lf=180  bom=0
+   shelfmark\utils.py                 3f6fe7d6d1c6   3649 crlf=0    lf=115  bom=0
+   shelfmark\views\__init__.py        c02a187b82b3   1665 crlf=0    lf=39   bom=0
+   shelfmark\views\api.py             d4ce7dc0e99b   4412 crlf=0    lf=113  bom=0
+   shelfmark\views\books.py           81904f2e4009  12308 crlf=0    lf=319  bom=0
+   shelfmark\views\browse.py          0c96bfee8d55  10524 crlf=0    lf=274  bom=0
+   shelfmark\views\shelves.py         f554ea259818   7528 crlf=0    lf=174  bom=0
+   shelfmark\views\system.py          23ed4a0b0cc2   1747 crlf=0    lf=51   bom=0
+   shelfmark\views\tools.py           b26289e078de  18680 crlf=0    lf=426  bom=0
+-- symbol table: known=129 builtins=160 stdlib=290 --
+   free app.py                         (none)
+   free export_data.py                 (none)
+   free shelfmark\__init__.py          (none)
+   free shelfmark\books.py             (none)
+Traceback (most recent call last):
+  File "D:\a\shelfmark\shelfmark\tools\check_imports.py", line 266, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "D:\a\shelfmark\shelfmark\tools\check_imports.py", line 249, in main
+    print("   ? %s  \u672a\u8bc6\u522b\u540d\u5b57\uff1a%s" % (rel, ", ".join(unknown)))
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\hostedtoolcache\windows\Python\3.13.15\x64\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 27-32: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\a\shelfmark\shelfmark\tools\check_imports.py", line 272, in <module>
+    print(tb)
+    ~~~~~^^^^
+  File "C:\hostedtoolcache\windows\Python\3.13.15\x64\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 257-262: character maps to <undefined>
