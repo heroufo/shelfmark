@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
 """通用工具函数单元测试（shelfmark/utils.py）。"""
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import re
 

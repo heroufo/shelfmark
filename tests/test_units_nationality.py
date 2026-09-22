@@ -4,6 +4,16 @@
 该功能的关键约定：国籍只从文件名解析、不联网；无标记或标记无法识别一律
 判定为中国。这些用例把这个约定固化下来。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import pytest
 

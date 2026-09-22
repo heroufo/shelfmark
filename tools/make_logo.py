@@ -6,6 +6,16 @@
 输出：static/images/shelfmark_logo.png（512x512 RGBA，四角透明）
 用法：python tools/make_logo.py
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import os
 

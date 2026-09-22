@@ -4,6 +4,16 @@
 **全部离线**：解析逻辑用固定 HTML 片段喂进去，抓取函数只验证
 「离线开关生效」「网络失败优雅返回」，绝不发真实请求。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import pytest
 

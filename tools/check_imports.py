@@ -19,6 +19,16 @@ Python 是动态语言：模块里引用了没 import 的名字，编译期不�
 md5 / 字节数 / 行尾统计 / BOM 状态，便于跨平台比对（同样的输入必须得到
 同样的结论；若结论不同，先比对文件指纹）。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import argparse
 import ast

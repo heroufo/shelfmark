@@ -18,6 +18,16 @@
     python tools/rename_brand.py                # 预览将要修改的文件
     python tools/rename_brand.py --apply        # 实际执行
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import argparse
 import os

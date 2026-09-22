@@ -15,6 +15,16 @@ app.py 拆分辅助工具（重构期间使用的一次性工具，完成后可�
 3. app.py 删除已搬走的符号，并自动重算它需要的项目内 import
 4. --dry-run 只打印计划，不写盘
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import argparse
 import ast

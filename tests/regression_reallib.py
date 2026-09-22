@@ -11,6 +11,16 @@
     python tests/regression_reallib.py --baseline X   # 指定基线书库做 md5 对比
 退出码 0 = 全部通过，1 = 有失败项。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import argparse
 import hashlib

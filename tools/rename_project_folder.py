@@ -26,6 +26,16 @@ Windows 不允许改名一个"正被某进程当作工作目录或打开着"的�
 若不需要保留旧名联接（例如你确定所有引用都已更新），用 --no-junction，
 这样旧文件夹名会彻底消失。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 import argparse
 import os
 import subprocess

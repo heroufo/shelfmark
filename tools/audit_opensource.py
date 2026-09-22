@@ -11,6 +11,16 @@
 用法：
     python tools/audit_opensource.py          # 输出报告，有 P0 问题时退出码 1
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import os
 import re

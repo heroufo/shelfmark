@@ -13,6 +13,16 @@
 - 书库元数据导出为 JSON 下载
 - 异常校验：无效路径、卷号非数字等均捕获并友好提示，不崩溃
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import json
 import os

@@ -8,6 +8,16 @@
 本文件把 36 条路由的「URL 规则 / 端点名 / 方法」全部固化为基线，
 并反向扫描所有模板，确认每个 url_for 引用的端点都真实存在。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import os
 import re

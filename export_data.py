@@ -15,6 +15,16 @@
      <站点目录>/data/library.json    (去掉 file_path 等本机路径，保留展示字段)
      <站点目录>/data/covers/*        (封面图片)
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 import json
 import os
 import shutil

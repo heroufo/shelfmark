@@ -4,6 +4,16 @@
 覆盖：排序配置、表单校验与构建、书架成员计算、标签统计。
 不涉及网络与真实书库。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import pytest
 

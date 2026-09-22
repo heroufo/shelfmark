@@ -13,6 +13,16 @@ pytest 公共装置。
     regression_reallib.py / post_routes_check.py   本机真实书库端到端脚本
     manual_*.py        需要真人点击的手动验证脚本（pytest 不收集）
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import os
 import sys

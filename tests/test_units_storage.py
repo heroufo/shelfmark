@@ -4,6 +4,16 @@
 全部在临时目录里跑（temp_storage fixture），不碰真实书库。
 重点验证「坏数据不能让程序崩溃」这条硬约定。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import json
 import os

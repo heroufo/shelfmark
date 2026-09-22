@@ -27,6 +27,16 @@
    中止并报错。这是为了防止将来有人改动白名单时把私人数据带出去。
 3. **可重复执行**：同名 zip 会被覆盖，不依赖任何外部状态。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import argparse
 import hashlib

@@ -14,6 +14,16 @@
 用法：python tests/post_routes_check.py
 退出码 0 = 全部通过且数据已干净还原。
 """
+import sys
+
+# Windows consoles default to cp1252; without this, any print() of CJK
+# text raises UnicodeEncodeError and aborts the script.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 
 import hashlib
 import io
