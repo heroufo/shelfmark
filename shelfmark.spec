@@ -37,6 +37,14 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# exe 图标由 make_icon.py 从 static/images/shelfmark_logo.png 生成（产物在
+# build_exe/，该目录不入库）。未生成时不让打包直接失败，只是没有自定义图标。
+_ICON = os.path.join(PROJECT, "build_exe", "icon.ico")
+if not os.path.isfile(_ICON):
+    print("[shelfmark.spec] icon.ico not found -> build without icon "
+          "(run 'python make_icon.py' first to get the proper icon)")
+    _ICON = None
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -50,6 +58,6 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,                       # 无控制台窗口（双击静默后台运行，日志写 data/app.log）
-    icon=os.path.join(PROJECT, "build_exe", "icon.ico"),
+    icon=_ICON,
     disable_windowed_traceback=False,
 )

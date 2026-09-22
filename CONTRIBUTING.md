@@ -52,17 +52,19 @@ pip install -r requirements.txt        # 运行时依赖（仅 Flask）
 python app.py                          # → http://127.0.0.1:5000
 ```
 
-打包为 exe / 生成图标时再装开发依赖：
+打包为 exe 时再装开发依赖，并先生成图标（图标由 `static/images/shelfmark_logo.png`
+派生，产物落在不入库的 `build_exe/`；缺图标时 spec 会退化为无图标构建而非报错）：
 
 ```bash
 pip install -r requirements-dev.txt
+python make_icon.py
 python -m PyInstaller --noconfirm --clean --distpath dist_exe shelfmark.spec
 ```
 
 ## 数据与本机路径
 
 - 程序所有可写数据都在 `data/`（首次运行自动创建）。
-- 路径基准由 `app.py` 顶部的「双基地」逻辑决定，**不要写死绝对路径**：
+- 路径基准由 `shelfmark/paths.py` 的「双基地」逻辑决定，**不要写死绝对路径**：
   - 源码运行：`RUNTIME_DIR = RES_DIR = 项目目录`
   - 打包运行（`sys.frozen`）：`RUNTIME_DIR` = exe 所在目录，`RES_DIR` = 解包临时目录
 - 在线发布站点的路径走 `data/config.json` 的 `site_dir` 或环境变量 `SITE_DIR`，
