@@ -21,6 +21,7 @@ file_dialog_helper.py     源码版：以子进程弹系统文件对话框（tki
 make_icon.py / make_autostart.py   图标生成 / 开机自启脚本生成
 shelfmark.spec            PyInstaller 打包配置（单文件 exe）
 start.bat / build_exe.bat Windows 一键启动 / 一键重新打包
+rename-folder.cmd        把项目文件夹改名并保留旧名目录联接（迁移用，可选）
 templates/ static/        Jinja2 模板与本地化静态资源
 tools/ tests/ docs/       开发辅助、测试、设计文档
 data/                     【本地数据，不入库】书库 JSON、配置、日志
