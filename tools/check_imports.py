@@ -13,6 +13,10 @@ Python 是动态语言：模块里引用了没 import 的名字，编译期不�
 用法：
     python tools/check_imports.py             # 检查全部（app.py + shelfmark/）
     python tools/check_imports.py --strict    # 有可疑名字时返回非零退出码
+    python tools/check_imports.py --verbose   # 额外打印每个文件的自由名字清单
+
+在 GitHub Actions 上运行时，会把诊断信息以 ::error:: / ::notice:: 注解输出，
+便于在不登录、下载不了日志的情况下定位问题（注解可经公开 API 读取）。
 """
 
 import argparse
@@ -32,6 +36,17 @@ ALLOWED = {
 BUILTINS = set(dir(builtins))
 # 标准库模块名（Python 3.10+ 提供），用于识别「用了 urllib 却没 import」这类问题
 STDLIB_NAMES = set(getattr(sys, "stdlib_module_names", ()))
+
+ON_CI = os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+def annotate(level, text):
+    """输出 GitHub Actions 注解（转义换行与百分号）。"""
+    if not ON_CI:
+        return
+    payload = (str(text).replace("%", "%25")
+               .replace("\r", "%0D").replace("\n", "%0A"))
+    print("::%s::%s" % (level, payload))
 
 
 def collect(path):
@@ -133,16 +148,29 @@ def scan_files():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--verbose", action="store_true",
+                    help="打印每个文件的自由名字清单")
     args = ap.parse_args()
+
+    files = scan_files()
+
+    # 环境指纹：跨平台排查时最有用的一行
+    fingerprint = ("python=%s platform=%s files=%d stdlib_names=%d root=%s"
+                   % (sys.version.split()[0], sys.platform, len(files),
+                      len(STDLIB_NAMES), ROOT))
+    print("env: " + fingerprint)
+    annotate("notice", "check_imports env: " + fingerprint)
 
     # 全局符号表：包内所有模块的顶层符号 + 项目根模块
     known = set()
-    for path in scan_files():
+    for path in files:
         with open(path, encoding="utf-8") as f:
             try:
                 tree = ast.parse(f.read())
             except SyntaxError as e:
+                rel = os.path.relpath(path, ROOT)
                 print("语法错误 %s: %s" % (path, e))
+                annotate("error", "syntax error in %s: %s" % (rel, e))
                 return 1
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -160,8 +188,14 @@ def main():
                                 known.add(t.id)
 
     problems = 0
-    for path in scan_files():
-        free, _ = collect(path)
+    for path in files:
+        try:
+            free, _ = collect(path)
+        except SyntaxError as e:
+            rel = os.path.relpath(path, ROOT)
+            print("语法错误 %s: %s" % (path, e))
+            annotate("error", "syntax error in %s: %s" % (rel, e))
+            return 1
         unresolved = sorted(free)
         rel = os.path.relpath(path, ROOT)
         if unresolved:
@@ -174,15 +208,38 @@ def main():
                 problems += len(suspicious)
                 print("!! %s" % rel)
                 print("   漏 import（项目内已有同名符号）：%s" % ", ".join(suspicious))
+                reason = []
+                for n in suspicious:
+                    where = []
+                    if n in known:
+                        where.append("known")
+                    if n in STDLIB_NAMES:
+                        where.append("stdlib")
+                    reason.append("%s[%s]" % (n, "+".join(where)))
+                annotate("error", "%s 漏 import: %s" % (rel, " ".join(reason)))
             if unknown:
                 print("   ? %s  未识别名字：%s" % (rel, ", ".join(unknown)))
+            if args.verbose or ON_CI:
+                annotate("notice", "%s free=%s" % (rel, ",".join(unresolved)))
+
     print("-" * 60)
     if problems:
         print("发现 %d 处漏 import，请修复。" % problems)
+        annotate("error", "check_imports: %d unresolved name(s) treated as missing imports"
+                 % problems)
         return 1 if args.strict else 0
     print("import 完整性检查通过 ✓")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        import traceback
+        tb = traceback.format_exc()
+        print(tb)
+        annotate("error", "check_imports crashed: " + tb)
+        sys.exit(3)
