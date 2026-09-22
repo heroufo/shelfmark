@@ -56,6 +56,10 @@ STDLIB_IMPORTS = {
 FLASK_NAMES = ["Flask", "Response", "abort", "flash", "jsonify", "redirect",
                "render_template", "request", "send_file",
                "send_from_directory", "url_for"]
+# 项目根目录下的同级模块（以模块名整体导入，而不是 from ... import ...）
+MODULE_IMPORTS = {
+    "export_data": "import export_data",
+}
 # 项目内模块的公开路径（用于生成 from ... import ...）
 PROJECT_PREFIX = "shelfmark"
 
@@ -170,6 +174,64 @@ STAGES = {
             ],
         },
     ],
+    # ---- 阶段三：视图层（按领域拆到 shelfmark/views/）----
+    # 设计：视图函数源码原样搬运（不缩进），统一由一个 register(app) 用
+    # app.add_url_rule 显式注册 —— 端点名与原实现逐一对齐，模板里的
+    # url_for 无需任何改动。之所以不用「把装饰器缩进到 register 里」的写法，
+    # 是为了保证函数体（含多行字符串）一个字节都不变。
+    "views": [
+        {
+            "module": "shelfmark/views/system.py",
+            "doc": "模板上下文注入（context processor）：书库统计、侧栏书架、发布状态。",
+            "symbols": ["inject_library_stats", "inject_nav_shelves",
+                        "inject_publish_state"],
+        },
+        {
+            "module": "shelfmark/views/browse.py",
+            "doc": "浏览类页面：主页、全部书籍、书籍详情、作者/出版社/丛书聚合视图。",
+            "symbols": ["_index_impl", "index", "all_books", "book_detail",
+                        "author_view", "publisher_view", "series_view"],
+        },
+        {
+            "module": "shelfmark/views/books.py",
+            "doc": "书籍操作路由：新增、编辑、删除、豆瓣补全、批量操作、打开与下载。",
+            "symbols": ["book_add", "book_edit", "book_douban_update",
+                        "refresh_blurb", "book_delete", "book_bulk_delete",
+                        "books_bulk_tags", "books_bulk_shelf", "open_book",
+                        "download_book"],
+        },
+        {
+            "module": "shelfmark/views/shelves.py",
+            "doc": "书架路由：列表、详情、创建、编辑、删除、加入/移出书籍。",
+            "symbols": ["shelves_view", "shelf_detail", "shelf_create",
+                        "shelf_add_book", "shelf_remove_book", "shelf_delete",
+                        "shelf_edit"],
+        },
+        {
+            "module": "shelfmark/views/tools.py",
+            "doc": "管理工具路由：统计仪表盘、批量扫描导入、作者国籍、路径修正、\n"
+                   "书库恢复/导出，以及在线发布。",
+            "symbols": ["stats_view", "import_books", "import_commit",
+                        "paths_repair", "nationality_run", "restore_json",
+                        "export_json", "publish_online"],
+        },
+        {
+            "module": "shelfmark/views/api.py",
+            "doc": "前后端交互接口：本地文件服务、原生对话框、元数据查询、封面上传。",
+            "symbols": ["serve_file", "api_browse_file", "api_browse_folder",
+                        "api_book_meta", "api_upload_cover"],
+        },
+    ],
+    "app_patches": [
+        (
+            'app.jinja_env.globals["file_exists"] = file_exists',
+            'app.jinja_env.globals["file_exists"] = file_exists\n'
+            '\n'
+            '# 注册全部路由：视图已按领域拆分到 shelfmark/views/ 下的各模块，\n'
+            '# 端点名与原单文件实现逐一对齐（模板里的 url_for 无需改动）。\n'
+            'register_all(app)',
+        ),
+    ],
 }
 
 
@@ -252,7 +314,7 @@ def render_imports(names, symbol_home, indent=""):
     lines = []
     std = []
     for n in sorted(names):
-        v = STDLIB_IMPORTS.get(n)
+        v = STDLIB_IMPORTS.get(n) or MODULE_IMPORTS.get(n)
         if v is None:
             continue
         for item in (v if isinstance(v, list) else [v]):
@@ -284,8 +346,62 @@ def render_imports(names, symbol_home, indent=""):
                 lines.append("from %s import (\n%s,\n)" % (mod, body))
     unknown = sorted(n for n in names
                      if n not in STDLIB_IMPORTS and n not in FLASK_NAMES
-                     and n not in symbol_home)
+                     and n not in MODULE_IMPORTS and n not in symbol_home)
     return lines, unknown
+
+
+def app_attr(node):
+    """若函数带 @app.xxx 装饰器，返回 xxx；否则返回 None"""
+    if not isinstance(node, ast.FunctionDef):
+        return None
+    for d in node.decorator_list:
+        t = d.func if isinstance(d, ast.Call) else d
+        if (isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name)
+                and t.value.id == "app"):
+            return t.attr
+    return None
+
+
+def build_reg(node, attr):
+    """把 @app.route/@app.context_processor 转换为显式注册项"""
+    dec = None
+    for d in node.decorator_list:
+        t = d.func if isinstance(d, ast.Call) else d
+        if (isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name)
+                and t.value.id == "app"):
+            dec = d
+            break
+    if attr == "context_processor":
+        return ("context_processor", node.name)
+    if attr == "route" and isinstance(dec, ast.Call) and dec.args:
+        rule = ast.literal_eval(dec.args[0])
+        kwargs = [(kw.arg, ast.literal_eval(kw.value)) for kw in dec.keywords]
+        return ("route", rule, node.name, kwargs)
+    return None
+
+
+def render_register(reg):
+    """生成 register(app) 函数体"""
+    lines = [
+        "def register(app):",
+        '    """把本模块的视图注册到 Flask 应用。',
+        "",
+        "    这里用显式注册（app.add_url_rule）而不是装饰器，是为了让视图函数",
+        "    原样保留在模块顶层、便于单独调用与测试；端点名与原实现完全一致，",
+        "    因此模板中的 url_for 无需任何改动。",
+        '    """',
+    ]
+    for item in reg:
+        if item[0] == "context_processor":
+            lines.append("    app.context_processor(%s)" % item[1])
+        else:
+            _, rule, endpoint, kwargs = item
+            kw = ""
+            if kwargs:
+                kw = ", " + ", ".join("%s=%r" % (k, v) for k, v in kwargs)
+            lines.append("    app.add_url_rule(%r, %r, %s%s)"
+                         % (rule, endpoint, endpoint, kw))
+    return "\n".join(lines) + "\n"
 
 
 def scan_package_home():
@@ -297,10 +413,13 @@ def scan_package_home():
     for root, dirs, files in os.walk(pkg):
         dirs[:] = [d for d in dirs if d != "__pycache__"]
         for fn in sorted(files):
-            if not fn.endswith(".py") or fn == "__init__.py":
+            if not fn.endswith(".py"):
                 continue
+            # 保留 __init__.py：views/__init__.py 里定义了 register_all
             path = os.path.join(root, fn)
             mod = os.path.relpath(path, ROOT).replace(os.sep, ".")[:-3]
+            if mod.endswith(".__init__"):        # 包入口：模块名即包名
+                mod = mod[:-len(".__init__")]
             with open(path, encoding="utf-8") as f:
                 try:
                     tree = ast.parse(f.read())
@@ -350,9 +469,9 @@ def run_stage(stage, apply_changes):
     table = top_nodes(src)
 
     # 1) 收集要搬运的内容
-    moved, removals = {}, []          # removals: (start, end) 1-based 闭区间
+    moved, removals, regs = {}, [], {}      # removals: (start, end) 1-based 闭区间
     for entry in plan:
-        chunks = []
+        chunks, reg = [], []
         for a, b in entry.get("line_ranges", []):
             chunks.append("\n".join(lines[a - 1:b]))
             removals.append((a, b))
@@ -361,10 +480,20 @@ def run_stage(stage, apply_changes):
             if node is None:
                 print("  !! 找不到符号 %s" % name)
                 return 1
-            a, b = node_span(node)
-            chunks.append(segment(lines, node))
-            removals.append((a, b))
+            attr = app_attr(node)
+            if attr:
+                info = build_reg(node, attr)
+                if info is None:
+                    print("  !! %s 的装饰器 @app.%s 不支持自动注册" % (name, attr))
+                    return 1
+                reg.append(info)
+                # 函数本体（不含装饰器）：装饰器由 register 里的显式注册替代
+                chunks.append("\n".join(lines[node.lineno - 1:node.end_lineno]))
+            else:
+                chunks.append(segment(lines, node))
+            removals.append(node_span(node))     # 删除时连装饰器一起删
         moved[entry["module"]] = chunks
+        regs[entry["module"]] = reg
 
     # 2) 合并删除区间（先按起点排序，再合并重叠/相邻区间；
     #    同时吞掉紧邻上方的连续注释行，避免留下孤立注释）
@@ -414,6 +543,9 @@ def run_stage(stage, apply_changes):
         mod_path = os.path.join(ROOT, entry["module"])
         mod_name = entry["module"].replace("/", ".")[:-3]
         body = "\n\n\n".join(moved[entry["module"]])
+        reg = regs.get(entry["module"]) or []
+        if reg:
+            body = body + "\n\n\n" + render_register(reg)
         names = free_names(body)
         # 排除本模块自身定义的符号（否则会生成自引用 import → 循环导入）
         names = {n for n in names if home.get(n) != mod_name}
@@ -442,6 +574,14 @@ def run_stage(stage, apply_changes):
             continue
         keep.append(line)
     new_app = compress_blanks("\n".join(keep))
+
+    # 5a) app.py 的定向补丁（如插入 register_all(app) 调用）
+    #     必须在推导 import 之前应用：补丁引入的新名字也需要被 import
+    for old, new in STAGES.get("app_patches", []):
+        if old not in new_app:
+            print("  !! app.py 未找到待修正片段：%r" % old[:60])
+            return 1
+        new_app = new_app.replace(old, new, 1)
 
     # app.py 需要从新模块 import 什么
     need = free_names(new_app)
