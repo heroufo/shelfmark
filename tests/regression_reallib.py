@@ -111,7 +111,34 @@ def main():
           os.path.normcase(os.path.join(os.path.dirname(ROOT), "library-web")),
           A.get_site_dir())
 
-    # ---- 5) 发布 dry-run（真实走导出逻辑，但不 push）----
+    # ---- 5) 深层调用检查：只有真的调用才会暴露 NameError 类的重构事故 ----
+    import shelfmark.books as BK
+    import shelfmark.metadata as MD
+    import shelfmark.nationality as NT
+    try:
+        # 本地必然连不上的地址：验证抓取链路（含 urllib 等依赖）能跑到底，
+        # 而不是想真去请求豆瓣（避免触发风控）
+        MD._http_get_text("http://127.0.0.1:1/none", timeout=1)
+        check("抓取链路可调用（无 NameError）", True)
+    except NameError as e:
+        check("抓取链路可调用（无 NameError）", False, repr(e))
+    except Exception:
+        check("抓取链路可调用（无 NameError）", True, "网络异常属预期")
+    try:
+        check("排序配置可用", "title" in BK.SORTABLE_FIELDS
+              and BK.SORTABLE_FIELDS["pages"]({"pages": "302"}) == 302)
+        check("国籍解析可用",
+              NT.nationality_from_filename("[英]阿加莎·克里斯蒂.pdf") == "英国")
+    except NameError as e:
+        check("书籍领域函数可调用（无 NameError）", False, repr(e))
+    try:
+        with A.app.test_request_context("/"):
+            u = BK.cover_url({"cover_path": "x.jpg"})
+        check("cover_url 可生成", isinstance(u, str) and len(u) > 0, u)
+    except NameError as e:
+        check("cover_url 可生成", False, repr(e))
+
+    # ---- 6) 发布 dry-run（真实走导出逻辑，但不 push）----
     try:
         j = client.post("/publish").get_json()
         check("publish dry-run", j.get("ok") is True,

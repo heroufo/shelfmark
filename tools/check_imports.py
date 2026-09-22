@@ -30,6 +30,8 @@ ALLOWED = {
     "annotations",
 }
 BUILTINS = set(dir(builtins))
+# 标准库模块名（Python 3.10+ 提供），用于识别「用了 urllib 却没 import」这类问题
+STDLIB_NAMES = set(getattr(sys, "stdlib_module_names", ()))
 
 
 def collect(path):
@@ -163,9 +165,11 @@ def main():
         unresolved = sorted(free)
         rel = os.path.relpath(path, ROOT)
         if unresolved:
-            # 全局符号表里有、但本文件没 import 的 → 一定是漏了 import
-            suspicious = [n for n in unresolved if n in known]
-            unknown = [n for n in unresolved if n not in known]
+            # 全局符号表（项目内）或标准库里有、但本文件没 import 的 → 一定漏了
+            suspicious = [n for n in unresolved
+                          if n in known or n in STDLIB_NAMES]
+            unknown = [n for n in unresolved
+                       if n not in known and n not in STDLIB_NAMES]
             if suspicious:
                 problems += len(suspicious)
                 print("!! %s" % rel)

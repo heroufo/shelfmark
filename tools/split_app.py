@@ -49,6 +49,9 @@ STDLIB_IMPORTS = {
     "datetime": "from datetime import datetime",
     "urllib.parse": "import urllib.parse",
     "urllib.request": "import urllib.request",
+    # 代码里常写 urllib.request.xxx，自由名字只会解析出最外层的 urllib，
+    # 因此这里要把两个子模块一起带上
+    "urllib": ["import urllib.parse", "import urllib.request"],
 }
 FLASK_NAMES = ["Flask", "Response", "abort", "flash", "jsonify", "redirect",
                "render_template", "request", "send_file",
@@ -247,12 +250,16 @@ def render_imports(names, symbol_home, indent=""):
     """把外部名字渲染成 import 语句块。
     symbol_home: {名字: 'shelfmark.xxx'} 项目内符号归属"""
     lines = []
-    std = sorted(STDLIB_IMPORTS[n] for n in names if n in STDLIB_IMPORTS)
-    seen = set()
-    for s in std:
-        if s not in seen:
-            lines.append(s)
-            seen.add(s)
+    std = []
+    for n in sorted(names):
+        v = STDLIB_IMPORTS.get(n)
+        if v is None:
+            continue
+        for item in (v if isinstance(v, list) else [v]):
+            if item not in std:
+                std.append(item)
+    std.sort()
+    lines.extend(std)
     flask = sorted(n for n in names if n in FLASK_NAMES)
     if flask:
         if len(flask) <= 4:
