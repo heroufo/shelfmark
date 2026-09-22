@@ -1,5 +1,8 @@
 # 📚 Shelfmark · 私人书库
 
+[![CI](https://github.com/heroufo/shelfmark/actions/workflows/ci.yml/badge.svg)](https://github.com/heroufo/shelfmark/actions/workflows/ci.yml)
+[![最新版本](https://img.shields.io/github/v/release/heroufo/shelfmark?label=%E4%B8%8B%E8%BD%BD)](https://github.com/heroufo/shelfmark/releases/latest)
+
 本地运行、零依赖服务的个人电子书管理器。用 Flask + 单个 JSON 文件管理你的藏书元数据，
 自带封面墙、丛书分卷、书架归集、批量导入与在线元数据补全；也能打包成一个免安装的
 `exe`，拷到任何 Windows 电脑双击即用 —— 或直接从 GitHub Releases 下载成品包。

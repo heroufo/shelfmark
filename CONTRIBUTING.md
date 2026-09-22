@@ -112,6 +112,59 @@ python tests/manual_exe_browse.py         # 需先打包 exe
 > 改动了「打包 / 对话框 / 路径基准」相关代码时，请额外跑一遍手动验证脚本 ——
 > 自动化测试无法真正点选系统对话框。
 
+## CI 与发布
+
+推送 `main` / 建 PR 会触发 GitHub Actions：
+
+| 作业 | 内容 |
+| --- | --- |
+| `test` | ubuntu + windows × Python 3.10 / 3.12 / 3.13：编译 → 静态 import 检查 → 单元测试 |
+| `package-check` | Windows 上真实跑一遍 PyInstaller 打包，确认 spec 没坏 |
+| `release` | **仅推送 `v*` 标签时**：打包 → 组装 zip → 发布 GitHub Release |
+
+**发版**只需打标签并推送：
+
+```bash
+git tag -a v1.2.0 -m "Shelfmark v1.2.0"
+git push origin v1.2.0
+```
+
+`release` 作业会调用 `tools/make_release_package.py` 生成**不含个人数据**的
+`Shelfmark-vX.Y.Z-win64.zip`（exe + 使用说明 + LICENSE + 空的 `data/`、`covers/`）
+并挂到 Release 上。该作业需要写权限 —— workflow 里已声明
+`permissions: contents: write`；若仓库默认 token 为只读，需到
+Settings → Actions → General → Workflow permissions 选 "Read and write permissions"。
+
+### 跨平台陷阱：脚本输出必须是 UTF-8
+
+Windows 的 Python 在**非交互**环境（CI、重定向到文件）下 `sys.stdout` 默认是
+**cp1252**，此时任何 `print()` 中文都会抛 `UnicodeEncodeError` 让脚本中断 ——
+而且往往**恰好死在正要报告问题的那一刻**（看起来像"检查逻辑在 Windows 上不一致"）。
+因此所有入口脚本（`app.py`、`export_data.py`、`tools/*.py`、`tests/*.py`）
+顶部都注入了这段守卫：
+
+```python
+import sys
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+```
+
+新增会打印中文的脚本时请一并加上；CI 里也设了 `PYTHONIOENCODING: utf-8`。
+遇到"Linux 通过、Windows 失败"且两边文件指纹一致的情况，先查这里。
+
+### CI 失败时怎么拿日志
+
+`test` 作业的静态检查步骤会把完整输出落到 `ci-diag.txt`，并打印每个源文件的
+md5 / 字节数 / 行尾 / BOM 指纹。若在 Windows 上失败，会自动把该文件推到
+`ci-diag` 分支 —— 于是无需登录 GitHub 也能取到原始输出：
+
+```bash
+git fetch origin ci-diag && git show FETCH_HEAD:ci-diag.txt
+```
+
 ## 提交规范
 
 - 分支：从 `main` 切出 `feat/xxx`、`fix/xxx`。
