@@ -45,7 +45,7 @@ paths → utils → storage → nationality / metadata / dialogs → books → p
 ## 开发环境
 
 ```bash
-git clone https://github.com/<your-name>/shelfmark.git
+git clone https://github.com/heroufo/shelfmark.git
 cd shelfmark
 python -m venv .venv
 # Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
