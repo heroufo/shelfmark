@@ -25,7 +25,7 @@ APP_VERSION = "1.1.0"
 #   - RUNTIME_DIR = exe 所在目录 —— 用户可写数据区。书库 data/、封面 covers/、
 #     日志、发布配置都放这里（换电脑 = 拷贝 exe + data + covers 即迁移）
 #   - RES_DIR = exe 内部解压区 (_MEIPASS) —— 只读内置资源（模板 / 静态基础文件）
-# 源码运行（python app.py / 启动图书馆.bat）时两者相同，行为完全不变。
+# 源码运行（python app.py / start.bat）时两者相同，行为完全不变。
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 if IS_FROZEN:
     RUNTIME_DIR = os.path.dirname(os.path.abspath(sys.executable))

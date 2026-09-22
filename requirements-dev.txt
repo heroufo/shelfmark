@@ -1,10 +1,13 @@
-# 开发 / 打包依赖（程序运行时不需要，普通用户请只用 requirements.txt）
+# 开发 / 测试 / 打包依赖（程序运行时不需要，普通用户请只用 requirements.txt）
 #
 #   pip install -r requirements-dev.txt
 #
 -r requirements.txt
 
-# 打包为单文件 exe
+# ---------- 测试 ----------
+pytest>=7.4
+
+# ---------- 打包为单文件 exe ----------
 pyinstaller>=6.11
 # 生成 exe 图标（tools/make_logo.py、make_icon.py）
 pillow>=10.0
