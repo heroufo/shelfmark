@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}编辑书架 - Shelfmark{% endblock %}
+{% block topbar_title %}编辑书架{% endblock %}
+{% block content %}
+
+<style>
+  .bl-create { background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); padding: 22px 24px; max-width: 720px; }
+  .bl-create h3 { font-size: 15px; margin: 0 0 16px; color: #fff; }
+  .bl-create .row > div { margin-bottom: 14px; }
+  .bl-create label { font-size: 12.5px; color: var(--bl-muted); display: block; margin-bottom: 5px; }
+  .bl-create .form-control, .bl-create .form-select { background: var(--bl-bg); border: 1px solid var(--bl-border); color: var(--bl-text); border-radius: 8px; font-size: 13px; }
+  .bl-create .form-control:focus, .bl-create .form-select:focus { border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); }
+  .bl-kind-note { font-size: 12px; color: var(--bl-muted); margin-top: 6px; }
+  .bl-rule-box { background: rgba(255,255,255,.03); border: 1px solid var(--bl-border); border-radius: 10px; padding: 14px 16px; margin-top: 6px; }
+</style>
+
+<div class="bl-create">
+  <h3>✏️ 编辑书架《{{ shelf.name }}》</h3>
+  <form method="post" action="{{ url_for('shelf_edit', shelf_id=shelf.id) }}">
+    <div class="row">
+      <div class="col-12">
+        <label>书架名称</label>
+        <input type="text" class="form-control" name="name" value="{{ shelf.name }}" required>
+      </div>
+    </div>
+
+    {% if shelf.kind == 'smart' %}
+    <div class="bl-rule-box">
+      <div class="bl-kind-note" style="margin-top:0;margin-bottom:12px">智能书架规则（条件取「且」关系，实时筛选全部书籍）：</div>
+      <div class="row">
+        <div class="col-12 col-md-6">
+          <label>标签（含任一，空格分隔）</label>
+          <input type="text" class="form-control" name="rule_tags" value="{{ ' '.join(shelf.rule.tags) if shelf.rule and shelf.rule.get('tags') else '' }}">
+        </div>
+        <div class="col-12 col-md-6">
+          <label>状态</label>
+          <select class="form-select" name="rule_status">
+            <option value="">不限</option>
+            {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if shelf.rule and shelf.rule.get('status') == s else '' }}>{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-6">
+          <label>作者</label>
+          <input type="text" class="form-control" name="rule_author" value="{{ shelf.rule.author if shelf.rule and shelf.rule.get('author') else '' }}">
+        </div>
+        <div class="col-12 col-md-6">
+          <label>丛书</label>
+          <input type="text" class="form-control" name="rule_series" value="{{ shelf.rule.series if shelf.rule and shelf.rule.get('series') else '' }}">
+        </div>
+        <div class="col-12 col-md-6">
+          <label>评分 ≥</label>
+          <select class="form-select" name="rule_rating">
+            <option value="0">不限</option>
+            {% for r in [1,2,3,4,5] %}<option value="{{ r }}" {{ 'selected' if shelf.rule and shelf.rule.get('rating') == r else '' }}>{{ r }} 星</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="bl-kind-note">普通书架由详情页「加入书架」手动管理成员，此处仅可编辑名称。</div>
+    {% endif %}
+
+    <div style="margin-top:18px;display:flex;gap:10px">
+      <button type="submit" class="btn btn-bl-accent" style="background:var(--bl-accent);border-color:var(--bl-accent);color:#0d1012;font-weight:600;border-radius:8px;padding:7px 20px">保存修改</button>
+      <a href="{{ url_for('shelf_detail', shelf_id=shelf.id) }}" class="btn bl-btn-outline" style="border-radius:8px;padding:7px 20px">取消</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

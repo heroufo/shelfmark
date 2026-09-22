@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}书架 - Shelfmark{% endblock %}
+{% block topbar_title %}书架{% endblock %}
+{% block content %}
+
+<style>
+  .bl-shelf-card { background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .bl-shelf-card .ic { font-size: 22px; width: 34px; text-align: center; }
+  .bl-shelf-card .nm { font-weight: 700; color: #fff; font-size: 14.5px; text-decoration: none; }
+  .bl-shelf-card .nm:hover { color: var(--bl-accent); }
+  .bl-shelf-card .meta { font-size: 12px; color: var(--bl-muted); }
+  .bl-shelf-card .ct { margin-left: auto; font-size: 12.5px; color: var(--bl-accent); background: var(--bl-accent-soft); padding: 2px 10px; border-radius: 20px; }
+  .bl-shelf-card .del { background: transparent; border: 1px solid #f87171; color: #f87171; border-radius: 8px; font-size: 12px; padding: 4px 10px; }
+  .bl-shelf-card .del:hover { background: rgba(248,113,113,.12); }
+  .bl-shelf-card .bl-edit-link { color: var(--bl-muted); font-size: 15px; text-decoration: none; padding: 4px 7px; border-radius: 6px; }
+  .bl-shelf-card .bl-edit-link:hover { color: var(--bl-accent); background: rgba(255,255,255,.05); }
+  .bl-create { background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); padding: 18px 20px; margin-top: 8px; }
+  .bl-create h3 { font-size: 14px; margin: 0 0 14px; color: #fff; }
+  .bl-create .row > div { margin-bottom: 12px; }
+  .bl-create label { font-size: 12.5px; color: var(--bl-muted); display: block; margin-bottom: 4px; }
+  .bl-create .form-control, .bl-create .form-select { background: var(--bl-bg); border: 1px solid var(--bl-border); color: var(--bl-text); border-radius: 8px; font-size: 13px; }
+  .bl-create .form-control:focus, .bl-create .form-select:focus { border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); }
+  .bl-kind-note { font-size: 12px; color: var(--bl-muted); margin-top: 6px; }
+</style>
+
+<div class="bl-section-title">📚 我的书架 <span class="text-muted">手动收藏，可逐本加入</span></div>
+<div class="bl-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;">
+  {% for sh, c in normal %}
+  <div class="bl-shelf-card">
+    <span class="ic">📚</span>
+    <div>
+      <a class="nm" href="{{ url_for('shelf_detail', shelf_id=sh.id) }}">{{ sh.name }}</a>
+      <div class="meta">共 {{ c }} 本</div>
+    </div>
+    <span class="ct">{{ c }}</span>
+    <a class="bl-edit-link" href="{{ url_for('shelf_edit', shelf_id=sh.id) }}" title="编辑">✏️</a>
+    <form method="post" action="{{ url_for('shelf_delete', shelf_id=sh.id) }}" onsubmit="return confirm('删除书架《{{ sh.name }}》？仅删书架，不动书籍。');">
+      <button class="del" type="submit">删除</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="bl-empty" style="color:var(--bl-muted);font-size:13px">还没有书架，用下方表单新建一个吧。</div>
+  {% endfor %}
+</div>
+
+<div class="bl-section-title" style="margin-top:28px">✨ 智能书架 <span class="text-muted">按规则自动归集，实时更新</span></div>
+<div class="bl-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;">
+  {% for sh, c in smart %}
+  <div class="bl-shelf-card">
+    <span class="ic">✨</span>
+    <div>
+      <a class="nm" href="{{ url_for('shelf_detail', shelf_id=sh.id) }}">{{ sh.name }}</a>
+      <div class="meta">{{ shelf_rule_text(sh) }} · 共 {{ c }} 本</div>
+    </div>
+    <span class="ct">{{ c }}</span>
+    <a class="bl-edit-link" href="{{ url_for('shelf_edit', shelf_id=sh.id) }}" title="编辑">✏️</a>
+    <form method="post" action="{{ url_for('shelf_delete', shelf_id=sh.id) }}" onsubmit="return confirm('删除智能书架《{{ sh.name }}》？');">
+      <button class="del" type="submit">删除</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="bl-empty" style="color:var(--bl-muted);font-size:13px">还没有智能书架，新建时选择「智能」并填写规则即可。</div>
+  {% endfor %}
+</div>
+
+<div class="bl-create">
+  <h3>➕ 新建书架</h3>
+  <form method="post" action="{{ url_for('shelf_create') }}">
+    <div class="row">
+      <div class="col-12 col-md-4">
+        <label>书架名称</label>
+        <input type="text" class="form-control" name="name" placeholder="如：2026 待读" required>
+      </div>
+      <div class="col-12 col-md-4">
+        <label>类型</label>
+        <select class="form-select" name="kind" id="shelfKind">
+          <option value="normal">📚 普通书架（手动加入）</option>
+          <option value="smart">✨ 智能书架（规则自动）</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-4">
+        <label>标签（含任一，空格分隔）</label>
+        <input type="text" class="form-control" name="rule_tags" placeholder="科幻 经典">
+      </div>
+      <div class="col-12 col-md-3">
+        <label>状态</label>
+        <select class="form-select" name="rule_status">
+          <option value="">不限</option>
+          {% for s in status_options %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label>作者</label>
+        <input type="text" class="form-control" name="rule_author" placeholder="作者名">
+      </div>
+      <div class="col-12 col-md-3">
+        <label>丛书</label>
+        <input type="text" class="form-control" name="rule_series" placeholder="丛书名">
+      </div>
+      <div class="col-12 col-md-3">
+        <label>评分 ≥</label>
+        <select class="form-select" name="rule_rating">
+          <option value="0">不限</option>
+          {% for r in [1,2,3,4,5] %}<option value="{{ r }}">{{ r }} 星</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="bl-kind-note">提示：智能书架按上方规则实时筛选全部书籍（条件取「且」关系）；普通书架忽略规则、由详情页「加入书架」手动添加。</div>
+    <button type="submit" class="btn btn-bl-accent mt-2" style="background:var(--bl-accent);border-color:var(--bl-accent);color:#0d1012;font-weight:600;border-radius:8px;padding:7px 18px">创建书架</button>
+  </form>
+</div>
+
+{% endblock %}

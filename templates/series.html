@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}丛书 - Shelfmark{% endblock %}
+{% block topbar_title %}丛书{% endblock %}
+{% block content %}
+
+{% if groups %}
+<div class="row g-4">
+  <!-- 左侧：丛书列表 -->
+  <div class="col-md-3 col-lg-2">
+    <div class="list-group bl-card overflow-hidden">
+      <a href="{{ url_for('series_view') }}"
+         class="list-group-item list-group-item-action {{ 'active' if not selected else '' }}">全部丛书</a>
+      {% for name in groups|sort %}
+      <a href="{{ url_for('series_view', name=name) }}"
+         class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {{ 'active' if selected == name else '' }}">
+        {{ name }}
+        <span class="badge {{ 'bg-light text-dark' if selected == name else 'bg-secondary' }} rounded-pill">{{ groups[name]|length }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- 右侧：所选丛书的分卷列表（同丛书按卷号升序，已在后端排序） -->
+  <div class="col-md-9 col-lg-10">
+    <div class="mb-3">
+      <h5 style="font-weight:700">
+        {% if selected %}{{ selected }}{% else %}全部丛书{% endif %}
+        <span class="text-muted" style="font-size:13.5px;font-weight:400">共 {{ books|length }} 卷</span>
+      </h5>
+    </div>
+
+    <div class="bl-grid">
+      {% for b in books %}
+      <a class="bl-book" href="{{ url_for('book_detail', book_id=b.book_id) }}" title="{{ b.title }}">
+        <div class="bl-book-cover">
+          <img src="{{ cover_url(b) }}" alt="封面">
+          {% if b.series_number %}
+          <span style="position:absolute;left:8px;top:8px;background:rgba(11,13,18,.78);color:#fff;font-size:11px;padding:2px 8px;border-radius:20px">第 {{ b.series_number }} 卷</span>
+          {% endif %}
+        </div>
+        <div class="bl-book-title">{{ b.title }}</div>
+        <div class="bl-book-author">{{ b.author or '佚名' }} · {{ b.file_format or '未知格式' }}</div>
+      </a>
+      {% else %}
+      <div class="col-12 text-center py-5" style="color:var(--bl-muted)">暂无书籍</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5" style="color:var(--bl-muted)">
+  <div style="font-size:56px;margin-bottom:12px">📚</div>
+  <p>还没有创建任何丛书。在「新增书籍」或「编辑书籍」中填写丛书名即可自动归组。</p>
+</div>
+{% endif %}
+{% endblock %}

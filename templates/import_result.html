@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% block title %}工具合集 - Shelfmark{% endblock %}
+{% block topbar_title %}工具合集{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <!-- 导入表单（扫描预览） -->
+    <div class="bl-card">
+      <div class="p-4">
+        <h5 style="font-weight:700;margin-bottom:14px">📂 批量扫描导入</h5>
+        <form method="post" action="{{ url_for('import_books') }}">
+          <div class="input-group">
+            <input type="text" class="form-control" name="folder" id="folderInput"
+                   placeholder="请输入本地文件夹路径，如：D:\电子书"
+                   value="{{ results.folder if results else '' }}">
+            <button type="button" class="btn btn-outline-secondary" id="btnBrowseFolder">📂 浏览…</button>
+            <button type="submit" class="btn btn-bl-accent">扫描预览</button>
+          </div>
+        </form>
+        <ul class="small mb-0 mt-3" style="color:var(--bl-muted)">
+          <li>支持格式：PDF / EPUB / MOBI（会递归扫描子文件夹）</li>
+          <li>点击「扫描预览」后仅列出候选文件，<strong style="color:var(--bl-text)">勾选需要的再点「导入选中」</strong>，不会直接入库</li>
+          <li>书名自动从文件名截取（如「丑闻 - [日]远藤周作.epub」→「丑闻」，取引号或「 - 」之前的内容）</li>
+          <li>数据库中已存在同路径或同书名的会标记为「已存在」并自动禁用，避免重复入库</li>
+          <li>导入仅登记元数据，<strong style="color:var(--bl-text)">不会移动或删除任何磁盘文件</strong></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 作者国籍（按文件名解析） -->
+    <div class="bl-card mt-3">
+      <div class="p-4">
+        <h5 style="font-weight:700;margin-bottom:14px">🌍 作者国籍（按文件名解析）</h5>
+        <div class="small" style="color:var(--bl-muted);margin-bottom:12px">
+          共 <b style="color:var(--bl-text)">{{ nat.total }}</b> 本 · 有作者
+          <b style="color:var(--bl-text)">{{ nat.with_author }}</b> 本 · 已填
+          <b style="color:var(--bl-text)">{{ nat.filled }}</b> 本 · 待补
+          <b style="color:var(--bl-accent)">{{ nat.pending }}</b> 本
+        </div>
+
+        {% if nat.pending > 0 or nat.counts %}
+        <div class="alert alert-light border small" style="background:var(--bl-panel);color:var(--bl-text)">
+          <div style="margin-bottom:6px">根据书籍文件名自动识别：文件名含 <code>[英]</code> 这类标记时取对应国籍
+          （如 <code>[英]阿加莎·克里斯蒂.pdf</code> → 英国），无标记则为<b>中国</b>。本地执行、不联网、秒级完成。</div>
+          <form method="post" action="{{ url_for('nationality_run') }}" class="d-flex align-items-center gap-3 flex-wrap">
+            <label class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="mode" value="fill_empty" checked>
+              <span class="form-check-label" style="font-size:13px">只补空国籍（推荐）</span>
+            </label>
+            <label class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="mode" value="overwrite">
+              <span class="form-check-label" style="font-size:13px">覆盖已填写的国籍</span>
+            </label>
+            <button type="submit" class="btn btn-bl-accent btn-sm">🚀 按文件名解析</button>
+          </form>
+        </div>
+        {% endif %}
+
+        {% if nat.counts %}
+        <div class="small" style="color:var(--bl-muted);margin:14px 0 6px">当前国籍分布（有国籍的书，可滚动）</div>
+        <div style="max-height:440px;overflow-y:auto;border:1px solid var(--bl-border);border-radius:8px">
+          <table class="table align-middle bl-table mb-0">
+            <thead style="position:sticky;top:0;background:var(--bl-card);z-index:1">
+              <tr><th>国籍</th><th style="width:90px">数量</th><th>占比</th></tr>
+            </thead>
+            <tbody>
+              {% for nat_name, cnt in nat.counts %}
+              <tr>
+                <td class="fw-semibold" style="color:var(--bl-green, #4ade80)">{{ nat_name }}</td>
+                <td style="color:var(--bl-text)">{{ cnt }}</td>
+                <td>
+                  <div style="background:var(--bl-border);border-radius:999px;height:8px;width:100%;overflow:hidden">
+                    <div style="background:var(--bl-accent);border-radius:999px;height:8px;width:{{ (cnt / nat.with_author * 100)|round(1) }}%"></div>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4" style="color:var(--bl-muted)">
+          还没有任何国籍数据。点上方「按文件名解析」按文件名自动识别，或在新增加入书籍时由文件名自动填写。
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 标签统计（限高滚动） -->
+    <div class="bl-card mt-3">
+      <div class="p-4">
+        <h5 style="font-weight:700;margin-bottom:14px">🏷 标签统计</h5>
+        <div class="small" style="color:var(--bl-muted);margin-bottom:12px">
+          共 <b style="color:var(--bl-text)">{{ tag.total_books }}</b> 本书 ·
+          <b style="color:var(--bl-text)">{{ tag.total_tags }}</b> 个标签 ·
+          点击标签可查看该标签下的全部书籍
+        </div>
+        {% if tag.top %}
+        <div style="max-height:440px;overflow-y:auto;border:1px solid var(--bl-border);border-radius:8px">
+          <table class="table align-middle bl-table mb-0">
+            <thead style="position:sticky;top:0;background:var(--bl-card);z-index:1">
+              <tr><th>标签</th><th style="width:90px">数量</th><th>占比</th></tr>
+            </thead>
+            <tbody>
+              {% for tname, cnt in tag.top %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('index', tag=tname) }}" class="text-decoration-none fw-semibold" style="color:var(--bl-green, #4ade80)">{{ tname }}</a>
+                </td>
+                <td style="color:var(--bl-text)">{{ cnt }}</td>
+                <td>
+                  <div style="background:var(--bl-border);border-radius:999px;height:8px;width:100%;overflow:hidden">
+                    <div style="background:var(--bl-accent);border-radius:999px;height:8px;width:{{ (cnt / tag.max_count * 100)|round(1) }}%"></div>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4" style="color:var(--bl-muted)">
+          还没有任何标签。在书籍详情页或「编辑书籍」里为书添加标签后，这里会显示统计。
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 路径修正 -->
+    <div class="bl-card mt-3">
+      <div class="p-4">
+        <h5 style="font-weight:700;margin-bottom:14px">🔧 路径修正（旧前缀 → 新前缀）</h5>
+        <form method="post" action="{{ url_for('paths_repair') }}">
+          <div class="row g-2 align-items-center">
+            <div class="col-md-5">
+              <label class="form-label small mb-1" style="color:var(--bl-muted)">旧路径前缀</label>
+              <input type="text" class="form-control" name="old_prefix" placeholder="如：D:\电子书\">
+            </div>
+            <div class="col-md-1 text-center" style="color:var(--bl-muted)">→</div>
+            <div class="col-md-5">
+              <label class="form-label small mb-1" style="color:var(--bl-muted)">新路径前缀</label>
+              <input type="text" class="form-control" name="new_prefix" placeholder="如：E:\书库\">
+            </div>
+          </div>
+          <div class="mt-3 d-flex align-items-center gap-4 flex-wrap">
+            <label class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="fix_file" checked>
+              <span class="form-check-label" style="font-size:13px">书籍文件路径</span>
+            </label>
+            <label class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="fix_cover">
+              <span class="form-check-label" style="font-size:13px">封面路径（本地路径，URL 自动跳过）</span>
+            </label>
+            <button type="submit" class="btn btn-bl-accent btn-sm ms-auto">🔧 执行修正</button>
+          </div>
+        </form>
+        <ul class="small mb-0 mt-3" style="color:var(--bl-muted)">
+          <li>用于更换电脑、移动书库目录后快速修复失效路径；一键更新全部匹配书籍</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 恢复书库（上传 JSON） -->
+    <div class="bl-card mt-3">
+      <div class="p-4">
+        <h5 style="font-weight:700;margin-bottom:14px">📥 恢复书库（上传 JSON）</h5>
+        <form method="post" action="{{ url_for('restore_json') }}" enctype="multipart/form-data">
+          <div class="input-group">
+            <input type="file" name="file" accept=".json,application/json" class="form-control" required>
+            <select name="mode" class="form-select" style="max-width:170px">
+              <option value="merge">合并（推荐）</option>
+              <option value="replace">覆盖</option>
+            </select>
+            <button type="submit" class="btn btn-bl-accent">恢复</button>
+          </div>
+        </form>
+        <ul class="small mb-0 mt-3" style="color:var(--bl-muted)">
+          <li>从「导出书库」下载的 JSON 可在此上传恢复（与导出形成闭环）</li>
+          <li><strong style="color:var(--bl-text)">合并</strong>：仅新增库中不存在的书（按 id / 路径去重），不动已有书</li>
+          <li><strong style="color:var(--bl-text)">覆盖</strong>：用上传文件替换整个书库，原库自动备份为 library.json.bak_restore</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 导出书库（下载 JSON） -->
+    <div class="bl-card mt-3">
+      <div class="p-4">
+        <h5 style="font-weight:700;margin-bottom:14px">⬇ 导出书库（下载 JSON）</h5>
+        <a href="{{ url_for('export_json') }}" class="btn btn-bl-accent">⬇ 导出书库 JSON</a>
+        <ul class="small mb-0 mt-3" style="color:var(--bl-muted)">
+          <li>下载整个书库的元数据（书籍 + 书架），可配合上方「恢复书库」迁移或备份</li>
+          <li>导出的文件包含全部字段，不含磁盘电子书文件本身</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 扫描结果（预览态：勾选列表） -->
+    {% if results and results.preview %}
+    <div class="bl-card mt-3">
+      <div class="p-3" style="border-bottom:1px solid var(--bl-border)">
+        <h6 class="mb-0" style="font-weight:700">
+          扫描结果：发现 {{ results.found }} 个文件
+          <span class="text-success ms-2">可导入 {{ results.preview|selectattr('state', 'equalto', 'new')|list|length }} 本</span>
+          <span class="text-muted ms-2">已存在 {{ results.preview|selectattr('state', 'ne', 'new')|list|length }} 个（不显示）</span>
+        </h6>
+      </div>
+
+      {% set new_items = results.preview|selectattr('state', 'equalto', 'new')|list %}
+      {% set dup_count = results.preview|selectattr('state', 'ne', 'new')|list|length %}
+      {% if new_items %}
+      <form method="post" action="{{ url_for('import_commit') }}" id="commitForm">
+        <input type="hidden" name="folder" value="{{ results.folder }}">
+        <div class="p-2 d-flex align-items-center gap-3" style="border-bottom:1px solid var(--bl-border)">
+          <label class="small mb-0 d-flex align-items-center gap-2" style="color:var(--bl-muted)">
+            <input type="checkbox" id="checkAll" class="form-check-input"> 全选 / 全不选（可导入项）
+          </label>
+          {% if dup_count %}<span class="small ms-auto" style="color:var(--bl-muted)">已跳过 {{ dup_count }} 个重复书籍（不显示）</span>{% endif %}
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for p in new_items %}
+          <li class="list-group-item d-flex align-items-center gap-3">
+            <input type="checkbox" name="paths" value="{{ p.full }}" class="form-check-input path-check"
+                   checked>
+            <div class="flex-grow-1 min-w-0">
+              <div class="fw-semibold" style="color:var(--bl-text)">{{ p.title }}</div>
+              <div class="small text-truncate" style="color:var(--bl-muted)">
+                {{ p.format|upper }}
+                · <code style="color:#a5b4fc">{{ p.full }}</code>
+              </div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="p-3" style="border-top:1px solid var(--bl-border)">
+          <button type="submit" class="btn btn-bl-accent" id="btnCommit">＋ 导入选中（{{ new_items|length }} 本）</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="p-4 text-center" style="color:var(--bl-muted)">没有可导入的新书（全部已存在或未发现文件）。</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 导入结果（提交后） -->
+    {% if results and not results.preview %}
+    <div class="bl-card mt-3">
+      <div class="p-3" style="border-bottom:1px solid var(--bl-border)">
+        <h6 class="mb-0" style="font-weight:700">
+          导入结果：新增 {{ results.added|length }} 本
+          <span class="text-muted ms-2">跳过重复路径 {{ results.skipped_path|length }} 个 · 跳过重复书名 {{ results.skipped_title|length }} 个</span>
+        </h6>
+      </div>
+      <div>
+        {% if results.added %}
+        <ul class="list-group list-group-flush">
+          {% for b in results.added %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="text-decoration-none fw-semibold" style="color:var(--bl-text)">{{ b.title }}</a>
+              <div class="small" style="color:var(--bl-muted)">{{ b.file_format|upper }} · <code style="color:#a5b4fc">{{ b.file_path }}</code></div>
+            </div>
+            <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="btn btn-sm btn-outline-secondary">查看</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if results.skipped_path %}
+        <details class="p-3">
+          <summary class="small" style="color:var(--bl-muted)">查看 {{ results.skipped_path|length }} 个重复路径文件</summary>
+          <ul class="small mt-2 mb-0 ps-3" style="color:var(--bl-muted)">
+            {% for p in results.skipped_path %}<li><code style="color:#a5b4fc">{{ p }}</code></li>{% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+
+        {% if results.skipped_title %}
+        <details class="p-3">
+          <summary class="small" style="color:var(--bl-muted)">查看 {{ results.skipped_title|length }} 个重复书名文件</summary>
+          <ul class="small mt-2 mb-0 ps-3" style="color:var(--bl-muted)">
+            {% for full, title in results.skipped_title %}<li>书名「{{ title }}」已存在 · <code style="color:#a5b4fc">{{ full }}</code></li>{% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+
+        {% if not results.added and results.found == 0 %}
+        <div class="p-4 text-center" style="color:var(--bl-muted)">该文件夹下没有找到 PDF / EPUB / MOBI 文件。</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+  // 「浏览…」按钮：弹出系统原生目录选择框，回填路径（带超时兜底与防重复点击）
+  var btnBrowse = document.getElementById('btnBrowseFolder');
+  if (btnBrowse) {
+    btnBrowse.addEventListener('click', function () {
+      var btn = this;
+      var input = document.getElementById('folderInput');
+      btn.disabled = true;
+      btn.textContent = '打开中…';
+      var ctrl = ('AbortController' in window) ? new AbortController() : null;
+      var timer = setTimeout(function () {
+        if (ctrl) { ctrl.abort(); }
+        else { alert('目录选择器响应超时，请检查是否弹出了系统对话框或在后台窗口'); }
+      }, 120000);
+      var fetchOpts = ctrl ? { signal: ctrl.signal } : {};
+      fetch('{{ url_for("api_browse_folder") }}', fetchOpts)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok && data.path) { input.value = data.path; }
+          else { alert(data.message || '未选择目录'); }
+        })
+        .catch(function () { alert('打开目录选择器失败，请手动输入路径'); })
+        .finally(function () {
+          clearTimeout(timer);
+          btn.disabled = false;
+          btn.textContent = '📂 浏览…';
+        });
+    });
+  }
+
+  // 勾选计数 + 全选/全不选
+  var commitForm = document.getElementById('commitForm');
+  var btnCommit = document.getElementById('btnCommit');
+  var checkAll = document.getElementById('checkAll');
+  function refreshCount() {
+    if (!commitForm || !btnCommit) { return; }
+    var n = commitForm.querySelectorAll('.path-check:checked').length;
+    btnCommit.textContent = '＋ 导入选中（' + n + ' 本）';
+    btnCommit.disabled = (n === 0);
+  }
+  if (commitForm) {
+    commitForm.addEventListener('change', function (e) {
+      if (e.target.classList && e.target.classList.contains('path-check')) { refreshCount(); }
+    });
+    if (checkAll) {
+      checkAll.addEventListener('change', function () {
+        var boxes = commitForm.querySelectorAll('.path-check');
+        for (var i = 0; i < boxes.length; i++) { boxes[i].checked = checkAll.checked; }
+        refreshCount();
+      });
+    }
+    refreshCount();
+  }
+</script>
+{% endblock %}

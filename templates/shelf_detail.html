@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ shelf.name }} - Shelfmark{% endblock %}
+{% block topbar_title %}{{ shelf.name }}{% endblock %}
+{% block content %}
+
+<style>
+  .bl-shelf-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .bl-shelf-head .kind { font-size: 11.5px; padding: 2px 10px; border-radius: 20px; }
+  .bl-kind-normal { background: rgba(100,149,237,.15); color: var(--bl-blue); border: 1px solid rgba(100,149,237,.4); }
+  .bl-kind-smart { background: rgba(74,222,128,.15); color: var(--bl-accent); border: 1px solid rgba(74,222,128,.4); }
+  .bl-shelf-head .rule { font-size: 12.5px; color: var(--bl-muted); }
+  .bl-shelf-head .del { background: transparent; border: 1px solid #f87171; color: #f87171; border-radius: 8px; font-size: 12.5px; padding: 6px 14px; }
+  .bl-shelf-head .del:hover { background: rgba(248,113,113,.12); }
+  .bl-shelf-head .edit { margin-left: auto; background: transparent; border: 1px solid var(--bl-border); color: var(--bl-muted); border-radius: 8px; font-size: 12.5px; padding: 6px 14px; text-decoration: none; }
+  .bl-shelf-head .edit:hover { border-color: var(--bl-accent); color: var(--bl-accent); }
+</style>
+
+<div class="bl-shelf-head">
+  <h2 class="mb-0" style="font-size:20px;color:#fff;margin:0">{{ shelf.name }}</h2>
+  <span class="kind {{ 'bl-kind-smart' if shelf.kind == 'smart' else 'bl-kind-normal' }}">
+    {{ '✨ 智能书架' if shelf.kind == 'smart' else '📚 普通书架' }}
+  </span>
+  <span class="rule">共 {{ books|length }} 本</span>
+  {% if shelf.kind == 'smart' %}
+  <span class="rule">规则：{{ rule_text }}</span>
+  {% endif %}
+  <a class="edit" href="{{ url_for('shelf_edit', shelf_id=shelf.id) }}">✏️ 编辑</a>
+  <form method="post" action="{{ url_for('shelf_delete', shelf_id=shelf.id) }}" onsubmit="return confirm('删除书架《{{ shelf.name }}》？仅删书架，不动书籍。');">
+    <button class="del" type="submit">🗑 删除书架</button>
+  </form>
+</div>
+
+{% if shelf.kind == 'smart' %}
+<div class="bl-section-title" style="margin-top:14px">书架内容 <span class="text-muted">由规则自动归集，实时更新</span></div>
+{% else %}
+<div class="bl-section-title" style="margin-top:14px">书架内容</div>
+{% endif %}
+
+{% if books %}
+<div class="bl-grid">
+  {% for b in books %}
+  <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="bl-book" title="{{ b.title }}">
+    <div class="bl-book-cover"><img src="{{ cover_url(b) }}" alt="封面"></div>
+    <div class="bl-book-title">{{ b.title }}</div>
+    <div class="bl-book-author">{{ b.author or '佚名' }}</div>
+  </a>
+  {% endfor %}
+</div>
+
+{% if shelf.kind != 'smart' %}
+<div class="bl-section-title" style="margin-top:26px">书籍管理 <span class="text-muted">共 {{ books|length }} 本</span></div>
+<div class="bl-card overflow-hidden">
+  <table class="table table-hover align-middle mb-0 bl-table">
+    <thead>
+      <tr>
+        <th style="width:56px">封面</th>
+        <th>书名</th>
+        <th>作者</th>
+        <th>丛书</th>
+        <th>出版社</th>
+        <th>出版年</th>
+        <th>评分</th>
+        <th>状态</th>
+        <th style="width:140px">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in books %}
+      <tr>
+        <td><img src="{{ cover_url(b) }}" style="width:40px;height:56px;object-fit:cover;border-radius:5px" alt="封面"></td>
+        <td>
+          <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="fw-semibold text-decoration-none" style="color:var(--bl-text)">{{ b.title }}</a>
+          {% if b.subtitle %}<div class="small" style="color:var(--bl-muted)">{{ b.subtitle }}</div>{% endif %}
+          {% if b.file_path and not file_exists(b.file_path) %}<span class="badge bg-danger ms-1">文件缺失</span>{% endif %}
+        </td>
+        <td>{{ b.author or '—' }}</td>
+        <td>{% if b.series %}{{ b.series }}{% if b.series_number %} · 第{{ b.series_number }}卷{% endif %}{% else %}—{% endif %}</td>
+        <td>{{ b.publisher or '—' }}</td>
+        <td>{{ b.publish_year or '—' }}</td>
+        <td>{% if b.rating %}{{ '★' * b.rating }}{% else %}—{% endif %}</td>
+        <td><span class="badge bg-{{ status_class(b.status) }}">{{ b.status }}</span></td>
+        <td>
+          <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="btn btn-sm btn-outline-secondary">详情</a>
+          <form method="post" action="{{ url_for('shelf_remove_book', shelf_id=shelf.id) }}" style="display:inline">
+            <input type="hidden" name="book_id" value="{{ b.book_id }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit">移除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% else %}
+<div style="color:var(--bl-muted);font-size:14px;padding:20px 0">
+  {% if shelf.kind == 'smart' %}当前规则「{{ rule_text }}」未匹配到任何书籍，试着放宽规则。
+  {% else %}书架还是空的，去书籍详情页点「📚 加入书架」即可添加。{% endif %}
+</div>
+{% endif %}
+
+<div style="margin-top:18px">
+  <a href="{{ url_for('shelves_view') }}" class="btn bl-btn-outline" style="border-radius:8px">← 返回书架列表</a>
+</div>
+
+{% endblock %}

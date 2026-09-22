@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} - Shelfmark{% endblock %}
+{% block topbar_title %}{{ book.title }}{% endblock %}
+{% block content %}
+
+<!-- 视图页签（仅保留本工具实际支持的视图） -->
+<div class="bl-viewtabs">
+  <span class="bl-viewtab active">图书详情</span>
+</div>
+
+<div class="bl-detail-grid">
+  <!-- 左栏：封面 + 操作 -->
+  <aside class="bl-aside">
+    <div class="bl-detail-cover-wrap">
+      <img src="{{ cover_url(book) }}" class="bl-detail-cover" alt="封面">
+      {% if book.status and book.status != '未读' %}<span class="bl-detail-status">{{ book.status }}</span>{% endif %}
+    </div>
+    {% if book.file_path and not file_exists(book.file_path) %}
+    <div class="bl-detail-missing">⚠ 电子书文件缺失</div>
+    {% endif %}
+    <div class="bl-detail-actions">
+      <a href="{{ url_for('open_book', book_id=book.book_id) }}" class="btn bl-btn-read">▶ 阅读</a>
+      <a href="{{ url_for('download_book', book_id=book.book_id) }}" class="btn bl-btn-outline">⬇ 下载</a>
+      <form method="post" action="{{ url_for('book_douban_update', book_id=book.book_id) }}" style="margin:0">
+        <button type="submit" class="btn bl-btn-outline" style="width:100%">🔍 豆瓣更新</button>
+      </form>
+      <a href="{{ url_for('book_edit', book_id=book.book_id) }}" class="btn bl-btn-outline">✏️ 编辑</a>
+      <a href="{{ url_for('book_delete', book_id=book.book_id) }}"
+         class="btn bl-btn-danger-outline"
+         onclick="return confirm('确定删除《{{ book.title }}》？仅删除书库记录，磁盘文件不会被删除。');">🗑 删除</a>
+      <a href="{{ url_for('index') }}" class="btn bl-btn-outline">← 返回书库</a>
+    </div>
+  </aside>
+
+  <!-- 右区域：标题 + (信息方格 | 简介方格) 两格对齐 -->
+  <div class="bl-info">
+    <div class="bl-title-row">
+      <div class="bl-title-main">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h1 class="bl-detail-title mb-0">{{ book.title }}</h1>
+          {% if book.file_format %}<span class="bl-format-pill">{{ book.file_format | upper }}</span>{% endif %}
+        </div>
+        {% if book.subtitle %}<div class="bl-detail-subtitle">{{ book.subtitle }}</div>{% endif %}
+        {% if book.author %}<a class="bl-detail-author d-inline-block mt-2" href="{{ url_for('author_view', author=book.author) }}">{{ book.author }}</a>{% if book.author_nationality %}<span class="bl-nat-badge ms-2">{{ book.author_nationality }}</span>{% endif %}{% endif %}
+        {% if book.rating %}<div class="fs-5 mt-2" style="color:#fbbf24">{{ '★' * book.rating }}{{ '☆' * (5 - book.rating) }}</div>{% endif %}
+      </div>
+    </div>
+
+    <!-- 行式信息列表（杂志风）：两列、分隔线 -->
+    <div class="bl-detail-info">
+      <div class="bl-info-row">
+        <div class="bl-info-item"><span class="bl-info-label">出版社</span><span class="bl-info-value">{% if book.publisher %}<a href="{{ url_for('publisher_view', publisher=book.publisher) }}">{{ book.publisher }}</a>{% else %}—{% endif %}</span></div>
+        <div class="bl-info-item"><span class="bl-info-label">出版年</span><span class="bl-info-value">{{ book.publish_year or '—' }}</span></div>
+      </div>
+      <div class="bl-info-row">
+        <div class="bl-info-item">
+          <span class="bl-info-label">ISBN</span>
+          <span class="bl-info-value">
+            {% if book.isbn %}
+            {{ book.isbn }}
+            <a class="btn btn-sm bl-btn-outline ms-2" style="padding:2px 8px;font-size:11px"
+               target="_blank" rel="noopener"
+               href="https://book.douban.com/isbn/{{ book.isbn | replace('-', '') }}">📖 豆瓣读书</a>
+            {% else %}—{% endif %}
+          </span>
+        </div>
+        <div class="bl-info-item"><span class="bl-info-label">丛书</span><span class="bl-info-value">{% if book.series %}{{ book.series }}{% if book.series_number %} · 第 {{ book.series_number }} 卷{% endif %}{% else %}—{% endif %}</span></div>
+      </div>
+      <div class="bl-info-row">
+        <div class="bl-info-item"><span class="bl-info-label">格式</span><span class="bl-info-value">{{ book.file_format or '—' }}</span></div>
+        <div class="bl-info-item"><span class="bl-info-label">页数</span><span class="bl-info-value">{{ book.pages or '—' }}</span></div>
+      </div>
+      <div class="bl-info-row">
+        <div class="bl-info-item"><span class="bl-info-label">状态</span><span class="bl-info-value"><span class="badge" style="background:var(--bl-accent-soft);color:var(--bl-accent);border:1px solid rgba(74,222,128,.3)">{{ book.status }}</span></span></div>
+        <div class="bl-info-item"><span class="bl-info-label">添加时间</span><span class="bl-info-value">{{ book.added_time or '—' }}</span></div>
+      </div>
+      <div class="bl-info-row">
+        <div class="bl-info-item">
+          <span class="bl-info-label">文件</span>
+          <span class="bl-info-value">
+            {% if book.file_path %}
+            <code>{{ book.file_path }}</code>
+            {% if file_exists(book.file_path) %}<span class="badge" style="background:rgba(74,222,128,.15);color:#4ade80">存在</span>
+            {% else %}<span class="badge" style="background:rgba(248,113,113,.15);color:#f87171">缺失</span>{% endif %}
+            {% else %}—{% endif %}
+          </span>
+        </div>
+        <div class="bl-info-item"></div>
+      </div>
+    </div>
+
+    <!-- 简介卡（全宽） -->
+    <div class="bl-desc-card">
+      <div class="bl-desc-title">简介
+        <a href="{{ url_for('refresh_blurb', book_id=book.book_id) }}" class="bl-desc-refresh" title="重新从网络获取简介">↻</a>
+      </div>
+      <div class="bl-desc-text">{{ book.blurb or book.notes or '暂无简介。' }}</div>
+      {% if book.blurb %}<div class="bl-desc-src">简介来源：网络（豆瓣）· 自动获取</div>{% endif %}
+    </div>
+
+    <!-- 标签 · 书架（合并区：标签 chips + 已加入书架 + 加入更多） -->
+    <div class="bl-shelf-panel">
+      <div class="bl-shelf-panel-title">标签 · 书架</div>
+
+      {% if book.tags %}
+      <div class="bl-owner-tags">
+        {% for t in book.tags %}<a class="bl-tag-link" href="{{ url_for('index', tag=t) }}">{{ t }}</a>{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if book_shelves %}
+      <div class="bl-shelf-joined">
+        {% for sh in book_shelves %}
+        <div class="bl-shelf-chip">
+          <a href="{{ url_for('shelf_detail', shelf_id=sh.id) }}" class="bl-shelf-chip-name">{{ sh.name }}</a>
+          <form method="post" action="{{ url_for('shelf_remove_book', shelf_id=sh.id) }}" class="bl-shelf-chip-rm">
+            <input type="hidden" name="book_id" value="{{ book.book_id }}">
+            <input type="hidden" name="next" value="book_detail">
+            <button type="submit" title="从《{{ sh.name }}》移除">✕</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% elif not book.tags %}
+      <div class="bl-shelf-empty">尚未加入任何书架</div>
+      {% endif %}
+
+      {% if addable_shelves %}
+      <form method="post" action="{{ url_for('shelf_add_book') }}" class="bl-shelf-add-form">
+        <input type="hidden" name="book_id" value="{{ book.book_id }}">
+        <div class="bl-shelf-add-list">
+          {% for sh in addable_shelves %}
+          <label class="bl-shelf-add-item">
+            <input type="checkbox" name="shelf_id" value="{{ sh.id }}">
+            <span>{{ sh.name }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <button type="submit" class="btn bl-btn-outline btn-sm">＋ 加入选中书架</button>
+      </form>
+      {% elif normal_shelves and not book_shelves %}
+      <div class="bl-shelf-empty">已加入全部书架</div>
+      {% elif not normal_shelves %}
+      <div class="bl-shelf-add-hint"><a href="{{ url_for('shelves_view') }}">尚无书架，去新建 →</a></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- 翻书导航：上一本 / 当前位置 / 下一本（按入库时间 新→旧） -->
+<div class="bl-book-nav">
+  {% if prev_book %}
+  <a class="btn bl-btn-outline" href="{{ url_for('book_detail', book_id=prev_book.book_id) }}">◀ 上一本</a>
+  {% else %}
+  <span class="btn bl-btn-outline" style="opacity:.4;cursor:not-allowed">◀ 上一本</span>
+  {% endif %}
+  <span class="bl-book-nav-pos">第 {{ current_pos }} 本 / 共 {{ total_books }} 本</span>
+  {% if next_book %}
+  <a class="btn bl-btn-outline" href="{{ url_for('book_detail', book_id=next_book.book_id) }}">下一本 ▶</a>
+  {% else %}
+  <span class="btn bl-btn-outline" style="opacity:.4;cursor:not-allowed">下一本 ▶</span>
+  {% endif %}
+</div>
+
+<!-- 底部：相似图书（内容推荐算法联动） -->
+{% if related_books %}
+<div class="bl-bottomtabs">
+  <span class="bl-bottomtab active">相似图书</span>
+</div>
+<div class="bl-shelf">
+  {% for r in related_books %}
+  <a href="{{ url_for('book_detail', book_id=r.book_id) }}" class="bl-book" title="{{ r.title }}">
+    <div class="bl-book-cover"><img src="{{ cover_url(r) }}" alt="封面"></div>
+    <div class="bl-book-title">{{ r.title }}</div>
+    <div class="bl-book-author">{{ r.author or '佚名' }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block title %}书库 - Shelfmark{% endblock %}
+{% block topbar_title %}{% if has_filter %}搜索结果{% else %}书库主页{% endif %}{% endblock %}
+
+{% block content %}
+{% set has_filter = q or status or rating or series or selected_tags %}
+{# 列表页端点：/all（全部书籍）与 /（首页）共用模板，链接按当前端点生成 #}
+{% set list_endpoint = 'all_books' if request.endpoint == 'all_books' else 'index' %}
+
+{# ===== 宏：表格列头排序链接 ===== #}
+{% macro sort_th(label, field) %}
+{% if sort_by == field and sort_dir == 'asc' %}
+  {% set target = field + ':desc' %}
+{% else %}
+  {% set target = field + ':asc' %}
+{% endif %}
+<th>
+  <a class="sort-link" style="color:inherit;text-decoration:none;cursor:pointer"
+     href="{{ url_for(list_endpoint, page=1, view=view, q=q, tag=selected_tags, status=status, rating=rating, series=series, sort=target) }}">
+    {{ label }}{% if sort_by == field %}<span style="margin-left:3px;color:var(--bl-accent)">{{ '▲' if sort_dir == 'asc' else '▼' }}</span>{% endif %}
+  </a>
+</th>
+{% endmacro %}
+
+{# ===== 宏：分页控件 ===== #}
+{% macro pager(page, total_pages) %}
+{% if total_pages > 1 %}
+<nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+  <span style="color:var(--bl-muted);font-size:13px">第 {{ page }} / {{ total_pages }} 页 · 每页 {{ per_page }} 本</span>
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {{ 'disabled' if page <= 1 }}">
+      <a class="page-link" href="{{ url_for(list_endpoint, page=page-1, view=view, q=q, tag=selected_tags, status=status, rating=rating, series=series, sort=sort) }}">«</a>
+    </li>
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+      <li class="page-item {{ 'active' if p == page }}">
+        <a class="page-link" href="{{ url_for(list_endpoint, page=p, view=view, q=q, tag=selected_tags, status=status, rating=rating, series=series, sort=sort) }}">{{ p }}</a>
+      </li>
+      {% elif p == 2 or p == total_pages - 1 %}
+      <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+    {% endfor %}
+    <li class="page-item {{ 'disabled' if page >= total_pages }}">
+      <a class="page-link" href="{{ url_for(list_endpoint, page=page+1, view=view, q=q, tag=selected_tags, status=status, rating=rating, series=series, sort=sort) }}">»</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+{% endmacro %}
+
+<!-- 工具栏：筛选折叠 + 批量操作 + 视图切换 -->
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <button class="bl-filter-toggle" id="blFilterToggle" type="button">
+    ⚙️ 筛选与排序{% if has_filter %}（已应用）{% endif %}
+  </button>
+  <button class="bl-filter-toggle" id="bulkDeleteBtn" type="button" style="border-color:#f87171;color:#f87171" disabled>
+    🗑 删除选中（0）
+  </button>
+  <button class="bl-filter-toggle" id="bulkTagBtn" type="button" disabled>
+    🏷 批量打标签
+  </button>
+  <button class="bl-filter-toggle" id="bulkShelfBtn" type="button" disabled>
+    📚 批量加入书架
+  </button>
+  <span class="text-muted" style="font-size:13px">{% if has_filter or view == 'list' %}共 {{ filtered_count }} 本{% else %}共 {{ total }} 本{% endif %}</span>
+  <div class="btn-group ms-auto" role="group" aria-label="视图切换">
+    <a href="{{ url_for(list_endpoint, view='cards', page=1, q=q, tag=selected_tags, status=status, rating=rating, series=series, sort=sort) }}"
+       class="btn btn-sm {{ 'btn-bl-accent' if view == 'cards' else 'btn-outline-secondary' }}">封面墙</a>
+    <a href="{{ url_for(list_endpoint, view='list', page=1, q=q, tag=selected_tags, status=status, rating=rating, series=series, sort=sort) }}"
+       class="btn btn-sm {{ 'btn-bl-accent' if view == 'list' else 'btn-outline-secondary' }}">表格</a>
+  </div>
+</div>
+
+<!-- 批量打标签弹层 -->
+<div class="modal fade" id="bulkTagModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bl-panel);color:var(--bl-text);border:1px solid var(--bl-border)">
+      <div class="modal-header" style="border-bottom:1px solid var(--bl-border)">
+        <h5 class="modal-title" style="font-size:15px;font-weight:600">🏷 批量打标签（已选 <span id="bulkTagCount">0</span> 本）</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" class="form-control" id="bulkTagsInput"
+               placeholder="用逗号分隔，如：科幻, 经典" style="background:var(--bl-card);border-color:var(--bl-border);color:var(--bl-text)">
+        <div class="mt-3">
+          <label class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="tagMode" value="append" checked>
+            <span class="form-check-label" style="font-size:13px">追加（保留原标签）</span>
+          </label>
+          <label class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="tagMode" value="replace">
+            <span class="form-check-label" style="font-size:13px">覆盖（替换全部标签）</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid var(--bl-border)">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-bl-accent btn-sm" id="bulkTagConfirm">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 批量加入书架弹层 -->
+<div class="modal fade" id="bulkShelfModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bl-panel);color:var(--bl-text);border:1px solid var(--bl-border)">
+      <div class="modal-header" style="border-bottom:1px solid var(--bl-border)">
+        <h5 class="modal-title" style="font-size:15px;font-weight:600">📚 批量加入书架（已选 <span id="bulkShelfCount">0</span> 本）</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body" style="max-height:320px;overflow-y:auto">
+        {% if normal_shelves %}
+        {% for sh in normal_shelves %}
+        <label class="d-flex align-items-center gap-2 py-1" style="cursor:pointer">
+          <input type="checkbox" class="form-check-input bulk-shelf-check" value="{{ sh.id }}">
+          <span style="font-size:13.5px">{{ sh.name }}</span>
+        </label>
+        {% endfor %}
+        {% else %}
+        <div class="small" style="color:var(--bl-muted)">还没有手动书架，先去「📚 我的书架」新建。</div>
+        {% endif %}
+      </div>
+      <div class="modal-footer" style="border-top:1px solid var(--bl-border)">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-bl-accent btn-sm" id="bulkShelfConfirm">确定加入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 折叠筛选面板：排序 / 状态 / 星级 / 丛书 / 标签 -->
+<form id="blFilterPanel" method="get" action="{{ url_for(list_endpoint) }}" class="bl-panel p-3 mb-4" style="display:none">
+  <input type="hidden" name="view" value="{{ view }}">
+  <div class="row g-3">
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">排序</label>
+      <select class="form-select form-select-sm" name="sort">
+        {% set sort_options = [
+           ('added_time:desc','入库时间（新→旧）'),
+           ('added_time:asc','入库时间（旧→新）'),
+           ('title:asc','书名（A→Z）'),
+           ('title:desc','书名（Z→A）'),
+           ('author:asc','作者'),
+           ('series:asc','丛书卷号'),
+           ('publisher:asc','出版社'),
+           ('publish_year:desc','出版年（新→旧）'),
+           ('pages:desc','页数（多→少）'),
+           ('pages:asc','页数（少→多）'),
+           ('rating:desc','评分（高→低）'),
+           ('status:asc','状态'),
+        ] %}
+        {% for value, label in sort_options %}
+        <option value="{{ value }}" {{ 'selected' if sort == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">阅读状态</label>
+      <select class="form-select form-select-sm" name="status">
+        <option value="">全部</option>
+        {% for s in ['未读','在读','已读','搁置'] %}
+        <option value="{{ s }}" {{ 'selected' if status == s else '' }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">星级</label>
+      <select class="form-select form-select-sm" name="rating">
+        <option value="">全部</option>
+        {% for r in range(5, 0, -1) %}
+        <option value="{{ r }}" {{ 'selected' if rating == r|string else '' }}>{{ '★' * r }}</option>
+        {% endfor %}
+        <option value="none" {{ 'selected' if rating == 'none' else '' }}>未评分</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">丛书</label>
+      <select class="form-select form-select-sm" name="series">
+        <option value="">全部</option>
+        {% for s in all_series %}
+        <option value="{{ s }}" {{ 'selected' if series == s else '' }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if all_tags %}
+    <div class="col-12">
+      <span class="small text-muted me-2">标签：</span>
+      {% for t in all_tags %}
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" name="tag" value="{{ t }}" id="tag-{{ loop.index }}"
+               {{ 'checked' if t in selected_tags else '' }}>
+        <label class="form-check-label small" for="tag-{{ loop.index }}">{{ t }}</label>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="col-12 d-flex gap-2">
+      <button type="submit" class="btn btn-bl-accent btn-sm px-4">应用筛选</button>
+      <a href="{{ url_for(list_endpoint, view=view) }}" class="btn btn-outline-secondary btn-sm">重置</a>
+    </div>
+  </div>
+</form>
+
+{% if total == 0 %}
+<div class="text-center py-5" style="color:var(--bl-muted)">
+  <div style="font-size:56px;margin-bottom:12px">📭</div>
+  <p style="font-size:15px">书库还是空的，去「新增书籍」或「批量导入」添加第一本书吧。</p>
+</div>
+
+{% elif show_all or has_filter or view == 'list' %}
+<!-- ===== 全部书籍独立页 / 筛选结果 / 表格视图 ===== -->
+<div class="mb-3">
+  <h5 style="font-weight:700">
+    {% if view == 'list' %}表格视图{% elif show_all %}全部书籍{% else %}筛选结果{% endif %}
+    <span class="text-muted" style="font-size:13.5px;font-weight:400">共 {{ filtered_count }} 本</span>
+  </h5>
+</div>
+
+{% if view == 'list' %}
+<div class="bl-card overflow-hidden">
+  <table class="table table-hover align-middle mb-0 bl-table">
+    <thead>
+      <tr>
+        <th style="width:38px"><input type="checkbox" class="form-check-input" id="checkAll" title="全选本页"></th>
+        <th style="width:56px">封面</th>
+        {{ sort_th('书名', 'title') }}
+        {{ sort_th('作者', 'author') }}
+        {{ sort_th('丛书', 'series') }}
+        {{ sort_th('出版社', 'publisher') }}
+        {{ sort_th('出版年', 'publish_year') }}
+        {{ sort_th('页数', 'pages') }}
+        {{ sort_th('评分', 'rating') }}
+        {{ sort_th('状态', 'status') }}
+        <th style="width:130px">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in page_books %}
+      <tr>
+        <td><input type="checkbox" class="form-check-input book-check" value="{{ b.book_id }}"></td>
+        <td><img src="{{ cover_url(b) }}" style="width:40px;height:56px;object-fit:cover;border-radius:5px" alt="封面"></td>
+        <td>
+          <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="fw-semibold text-decoration-none" style="color:var(--bl-text)">{{ b.title }}</a>
+          {% if b.subtitle %}<div class="small" style="color:var(--bl-muted)">{{ b.subtitle }}</div>{% endif %}
+          {% if b.file_path and not file_exists(b.file_path) %}<span class="badge bg-danger ms-1">文件缺失</span>{% endif %}
+        </td>
+        <td>{{ b.author or '—' }}</td>
+        <td>{% if b.series %}{{ b.series }}{% if b.series_number %} · 第{{ b.series_number }}卷{% endif %}{% else %}—{% endif %}</td>
+        <td>{{ b.publisher or '—' }}</td>
+        <td>{{ b.publish_year or '—' }}</td>
+        <td>{{ b.pages or '—' }}</td>
+        <td>{% if b.rating %}{{ '★' * b.rating }}{% else %}—{% endif %}</td>
+        <td><span class="badge bg-{{ status_class(b.status) }}">{{ b.status }}</span></td>
+        <td>
+          <a href="{{ url_for('book_detail', book_id=b.book_id) }}" class="btn btn-sm btn-outline-secondary">详情</a>
+          <a href="{{ url_for('open_book', book_id=b.book_id) }}" class="btn btn-sm btn-outline-success">打开</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{{ pager(page, total_pages) }}
+{% else %}
+<div class="bl-grid">
+  {% for b in page_books %}
+  <a class="bl-book" href="{{ url_for('book_detail', book_id=b.book_id) }}" title="{{ b.title }}">
+    <div class="bl-book-cover"><img src="{{ cover_url(b) }}" alt="封面">
+      <input type="checkbox" class="form-check-input book-check bl-book-check" value="{{ b.book_id }}"></div>
+    <div class="bl-book-title">{{ b.title }}</div>
+    <div class="bl-book-author">{{ b.author or '佚名' }}</div>
+  </a>
+  {% endfor %}
+</div>
+{{ pager(page, total_pages) }}
+{% endif %}
+
+{% else %}
+<!-- ===== 封面墙分栏（BookLore 风格） ===== -->
+{% if recent_books %}
+<section class="mb-4">
+  <div class="bl-section-title">🕘 最近添加</div>
+  <div class="bl-shelf">
+    {% for b in recent_books %}
+    <a class="bl-book" href="{{ url_for('book_detail', book_id=b.book_id) }}" title="{{ b.title }}">
+      <div class="bl-book-cover"><img src="{{ cover_url(b) }}" alt="封面">
+        <input type="checkbox" class="form-check-input book-check bl-book-check" value="{{ b.book_id }}"></div>
+      <div class="bl-book-title">{{ b.title }}</div>
+      <div class="bl-book-author">{{ b.author or '佚名' }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if random_books %}
+<section class="mb-4">
+  <div class="bl-section-title">🎲 随机发现</div>
+  <div class="bl-shelf">
+    {% for b in random_books %}
+    <a class="bl-book" href="{{ url_for('book_detail', book_id=b.book_id) }}" title="{{ b.title }}">
+      <div class="bl-book-cover"><img src="{{ cover_url(b) }}" alt="封面">
+        <input type="checkbox" class="form-check-input book-check bl-book-check" value="{{ b.book_id }}"></div>
+      <div class="bl-book-title">{{ b.title }}</div>
+      <div class="bl-book-author">{{ b.author or '佚名' }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endif %}
+
+<script>
+  // 筛选面板折叠切换
+  var toggle = document.getElementById('blFilterToggle');
+  var panel = document.getElementById('blFilterPanel');
+  toggle.addEventListener('click', function () {
+    var hidden = panel.style.display === 'none';
+    panel.style.display = hidden ? '' : 'none';
+    toggle.textContent = hidden ? '✖ 收起筛选' : '⚙️ 筛选与排序{% if has_filter %}（已应用）{% endif %}';
+  });
+
+  // ===== 批量删除 / 批量打标签 / 批量加入书架 =====
+  var bulkBtn = document.getElementById('bulkDeleteBtn');
+  var bulkTagBtn = document.getElementById('bulkTagBtn');
+  var bulkShelfBtn = document.getElementById('bulkShelfBtn');
+  var checks = document.querySelectorAll('.book-check');
+  var checkAll = document.getElementById('checkAll');
+
+  function selectedIds() {
+    return Array.prototype.map.call(
+      document.querySelectorAll('.book-check:checked'),
+      function (c) { return c.value; });
+  }
+  function updateBulkState() {
+    var n = selectedIds().length;
+    bulkBtn.textContent = '🗑 删除选中（' + n + '）';
+    bulkBtn.disabled = n === 0;
+    bulkTagBtn.disabled = n === 0;
+    bulkShelfBtn.disabled = n === 0;
+  }
+  checks.forEach(function (c) {
+    // 封面墙的勾选框嵌套在 <a> 内，阻止冒泡避免误跳转
+    c.addEventListener('click', function (e) { e.stopPropagation(); });
+    c.addEventListener('change', updateBulkState);
+  });
+  if (checkAll) {
+    checkAll.addEventListener('change', function () {
+      checks.forEach(function (c) { c.checked = checkAll.checked; });
+      updateBulkState();
+    });
+  }
+  bulkBtn.addEventListener('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    if (!confirm('确定删除选中的 ' + ids.length + ' 本？仅删除书库记录，磁盘文件不会被删除。')) { return; }
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = '{{ url_for("book_bulk_delete") }}';
+    ids.forEach(function (id) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'book_ids'; i.value = id;
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
+
+  // ===== 批量打标签 =====
+  var bulkTagModal = document.getElementById('bulkTagModal');
+  var bulkTagModalInst = null;
+  if (bulkTagBtn && bulkTagModal) {
+    bulkTagBtn.addEventListener('click', function () {
+      document.getElementById('bulkTagCount').textContent = selectedIds().length;
+      if (window.bootstrap) {
+        bulkTagModalInst = new bootstrap.Modal(bulkTagModal);
+        bulkTagModalInst.show();
+      } else {
+        bulkTagModal.style.display = 'block';
+      }
+    });
+  }
+  document.getElementById('bulkTagConfirm').addEventListener('click', function () {
+    var ids = selectedIds();
+    var tags = document.getElementById('bulkTagsInput').value;
+    var mode = document.querySelector('input[name="tagMode"]:checked').value;
+    if (!ids.length) { alert('没有选中的书籍'); return; }
+    if (!tags.trim()) { alert('请填写标签'); return; }
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = '{{ url_for("books_bulk_tags") }}';
+    ids.forEach(function (id) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'book_ids'; i.value = id;
+      form.appendChild(i);
+    });
+    ['tags', 'mode'].forEach(function (k) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = k;
+      i.value = k === 'tags' ? tags : mode;
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
+
+  // ===== 批量加入书架 =====
+  var bulkShelfModal = document.getElementById('bulkShelfModal');
+  var bulkShelfModalInst = null;
+  if (bulkShelfBtn && bulkShelfModal) {
+    bulkShelfBtn.addEventListener('click', function () {
+      document.getElementById('bulkShelfCount').textContent = selectedIds().length;
+      if (window.bootstrap) {
+        bulkShelfModalInst = new bootstrap.Modal(bulkShelfModal);
+        bulkShelfModalInst.show();
+      } else {
+        bulkShelfModal.style.display = 'block';
+      }
+    });
+  }
+  document.getElementById('bulkShelfConfirm').addEventListener('click', function () {
+    var ids = selectedIds();
+    var shelfIds = Array.prototype.map.call(
+      document.querySelectorAll('.bulk-shelf-check:checked'),
+      function (c) { return c.value; });
+    if (!ids.length) { alert('没有选中的书籍'); return; }
+    if (!shelfIds.length) { alert('请选择至少一个书架'); return; }
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = '{{ url_for("books_bulk_shelf") }}';
+    ids.forEach(function (id) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'book_ids'; i.value = id;
+      form.appendChild(i);
+    });
+    shelfIds.forEach(function (s) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'shelf_ids'; i.value = s;
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
+</script>
+{% endblock %}

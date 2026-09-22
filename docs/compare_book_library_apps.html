@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>书库管理程序对比与改造意见 · Shelfmark</title>
+<style>
+  :root{
+    --bg:#0d1012; --panel:#141922; --card:#1a1e21; --border:#464f56;
+    --green:#4ade80; --text:#dbe1ea; --muted:#9aa6b2;
+    --amber:#fb923c; --blue:#6495ed; --red:#f87171;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;
+    line-height:1.6;padding:32px 20px 60px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 4px;color:#fff}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+  h2{font-size:18px;margin:34px 0 14px;color:#fff;
+     border-left:4px solid var(--green);padding-left:10px}
+  /* matrix */
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);
+     border-radius:10px;overflow:hidden}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:center}
+  th{background:var(--panel);color:#fff;font-weight:600;position:sticky;top:0}
+  td:first-child,th:first-child{text-align:left;color:var(--text);font-weight:500}
+  .me{background:rgba(74,222,128,.10)}
+  .me td:first-child{color:var(--green);font-weight:600}
+  .y{color:var(--green);font-weight:700}
+  .p{color:var(--amber);font-weight:700}
+  .n{color:var(--red);font-weight:700;opacity:.85}
+  .legend{font-size:12px;color:var(--muted);margin:8px 0 0}
+  .legend b{color:var(--green)}
+  /* cards */
+  .grp{margin-bottom:8px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;
+     border-radius:20px;margin-right:8px}
+  .bA{background:rgba(74,222,128,.18);color:var(--green);border:1px solid rgba(74,222,128,.4)}
+  .bB{background:rgba(100,149,237,.18);color:var(--blue);border:1px solid rgba(100,149,237,.4)}
+  .bC{background:rgba(154,166,178,.16);color:var(--muted);border:1px solid var(--border)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+     padding:14px 16px;margin:10px 0}
+  .card h3{margin:0 0 4px;font-size:15px;color:#fff}
+  .card .meta{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .card .meta span{margin-right:14px}
+  .card p{margin:6px 0 0;font-size:13.5px;color:#c7ced8}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;
+     background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);margin:2px 4px 0 0}
+  .note{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--amber);
+     border-radius:8px;padding:12px 16px;font-size:13px;color:#c7ced8;margin-top:14px}
+  .order{background:var(--panel);border-radius:8px;padding:12px 18px;font-size:13.5px;margin-top:12px}
+  .order ol{margin:6px 0 0;padding-left:20px}
+  .order li{margin:3px 0}
+  footer{margin-top:30px;font-size:12px;color:var(--muted);text-align:center}
+  code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>书库管理程序对比与改造意见</h1>
+  <div class="sub">对标对象：BookLore · Calibre-Web · Kavita · Komga ｜ 评估对象：你的「Shelfmark」（Flask 单机版）</div>
+
+  <h2>一、能力对比矩阵</h2>
+  <table>
+    <tr>
+      <th>能力</th><th class="me">Shelfmark</th><th>BookLore</th><th>Calibre-Web</th><th>Kavita</th><th>Komga</th>
+    </tr>
+    <tr class="me"><td>封面墙 / 书架浏览</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>元数据编辑</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>多维筛选（状态/星级/丛书/标签）</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>全局搜索</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>作者 / 出版社 / 丛书 聚合页</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>相似书推荐（内容算法）</td><td class="y">✓</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td></tr>
+    <tr class="me"><td>自动获取简介（豆瓣）</td><td class="y">✓</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td></tr>
+    <tr class="me"><td>标签页点击即筛选</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>封面自动抓取</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>在线阅读器（EPUB/PDF）</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>阅读进度记录 / 同步</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>智能书架 / 收藏夹</td><td class="n">✗*</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>格式转换（mobi→epub 等）</td><td class="n">✗</td><td class="p">△</td><td class="y">✓</td><td class="n">✗</td><td class="n">✗</td></tr>
+    <tr class="me"><td>多用户 / 权限</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>OPDS（手机阅读 App 接入）</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>发送到 Kindle / 邮件</td><td class="n">✗</td><td class="y">✓</td><td class="y">✓</td><td class="n">✗</td><td class="n">✗</td></tr>
+    <tr class="me"><td>自动备份 / 恢复</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td></tr>
+    <tr class="me"><td>统计仪表盘</td><td class="n">✗</td><td class="y">✓</td><td class="p">△</td><td class="y">✓</td><td class="y">✓</td></tr>
+    <tr class="me"><td>移动端响应式</td><td class="p">△</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+  </table>
+  <p class="legend"><b>图例：</b>✓ 具备 ｜ △ 部分/有限 ｜ ✗ 无 ｜ 绿列＝你的程序（高亮行）。 * 侧栏「书架/智能书架」目前为装饰占位，未实现。</p>
+
+  <h2>二、可修改意见（按投入产出分组）</h2>
+
+  <div class="grp">
+    <span class="badge bA">A 组 · 高价值 · 低成本</span>
+    <div class="card">
+      <h3>1. 标签页点击即筛选</h3>
+      <div class="meta"><span>对标：Calibre / Kavita「点标签即检索」</span><span>工作量：小</span></div>
+      <p>详情页 / 卡片上的标签目前只是展示。索引页已支持 <code>?tag=xxx</code> 参数，只需把标签 span 改成指向 <code>/？tag=标签名</code> 的链接即可，复用现有筛选逻辑，零后端改动。</p>
+    </div>
+    <div class="card">
+      <h3>2. 自动备份 library.json</h3>
+      <div class="meta"><span>对标：所有成熟方案都有备份</span><span>工作量：小</span></div>
+      <p>写回数据前自动 <code>cp</code> 一份带日期的 <code>data/library.json.bak.YYYYMMDD</code>，保留最近 7 份、超限滚动删除。防手误/损坏，且你跨电脑迁移时更安心。</p>
+    </div>
+    <div class="card">
+      <h3>3. 封面自动抓取（复用豆瓣通道）</h3>
+      <div class="meta"><span>对标：BookLore / Kavita 元数据自动带封面</span><span>工作量：小–中</span></div>
+      <p>详情页已有「按书名取简介」的豆瓣通道，顺手把封面图也抓下来存到 <code>static/covers/</code>。缺封面的书（约占一部分）自动补图，封面墙观感立刻提升。仍遵守「不碰原文件」约定（图存到程序目录）。</p>
+    </div>
+    <div class="card">
+      <h3>4. 统计仪表盘</h3>
+      <div class="meta"><span>对标：BookLore reading stats</span><span>工作量：中</span></div>
+      <p>新增 <code>/stats</code>：藏书总量、状态分布（未读/在读/已读/搁置）、阅读进度分布、星级分布、标签 Top10、作者 Top10、按出版年趋势。侧栏加入口。纯读 library.json，无写入风险。</p>
+    </div>
+  </div>
+
+  <div class="grp">
+    <span class="badge bB">B 组 · 高价值 · 需投入</span>
+    <div class="card">
+      <h3>5. 在线阅读器（EPUB / PDF）</h3>
+      <div class="meta"><span>对标：BookLore / Calibre-Web 内置阅读器</span>｜ 工作量：大（前端为主）</div>
+      <p>这是与主流程序<strong>最大的体验差距</strong>——你现在只有「下载后本地打开」。可嵌入 <code>epub.js</code> + PDF.js 实现浏览器内阅读，支持翻页/字号/主题。只读不写，符合你的硬性约定。建议作为下一个大版本的核心。</p>
+    </div>
+    <div class="card">
+      <h3>6. 智能书架 / 收藏夹</h3>
+      <div class="meta"><span>对标：BookLore Magic Shelves / Kavita Smart Collections</span><span>工作量：中–大</span></div>
+      <p>用户可自建命名书架（如「2026 待读」「科幻经典」），拖书入架；或按规则（标签/星级/状态）自动归集。把侧栏占位的两个入口真正用起来。</p>
+    </div>
+    <div class="card">
+      <h3>7. 阅读进度记录</h3>
+      <div class="meta"><span>对标：全系均有</span><span>工作量：中</span></div>
+      <p>在 book 加 <code>progress</code> 字段，详情页可标记「读到第 X% / 已读 N 页」。配合在线阅读器体验最佳；单独做也能用。</p>
+    </div>
+    <div class="card">
+      <h3>8. 发送到设备 / 邮件</h3>
+      <div class="meta"><span>对标：Calibre-Web Send-to-Kindle</span><span>工作量：中</span></div>
+      <p>若你有 Kindle 或固定邮箱，可加「📤 发送」按钮调用 SMTP 把文件发到设备。需要你提供邮箱/授权码，涉及外部凭证。</p>
+    </div>
+  </div>
+
+  <div class="grp">
+    <span class="badge bC">C 组 · 可选增强</span>
+    <div class="card">
+      <h3>9. OPDS 目录</h3>
+      <div class="meta"><span>对标：全系支持</span><span>工作量：中</span></div>
+      <p>暴露 <code>/opds</code> 让 Moon+ Reader / KOReader 等手机 App 直接连你的库浏览+下载。适合「手机读、电脑管」的场景。</p>
+      <p><span class="tag">需常驻服务可外网/局域网访问</span></p>
+    </div>
+    <div class="card">
+      <h3>10. 多用户 / 权限</h3>
+      <div class="meta"><span>对标：BookLore / Calibre-Web</span><span>工作量：大（安全）</span></div>
+      <p>家庭共享时才有意义。对当前「单机个人使用」属过度工程，优先级放低。</p>
+    </div>
+    <div class="card">
+      <h3>11. 移动端深度适配 + 12. 多格式文件登记</h3>
+      <div class="meta"><span>对标：Kavita / Calibre</span><span>工作量：中</span></div>
+      <p>移动端现有响应式基础可再打磨；多格式需把「单文件路径」模型放宽为「一书多格式」，下载时可选格式。二者都非紧急。</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>约束提醒：</strong>你的硬性约定是「删除/导入<strong>绝不修改磁盘上的电子书文件</strong>，只动元数据」。
+    因此 <strong>格式转换（需重写文件）</strong> 与你的约定冲突，不建议做；而在线阅读器、封面抓取、进度、统计、书架、备份均为「只读/只写程序目录」，
+    与约定兼容，可放心推进。另外你是<strong>单机个人使用</strong>，多用户 / OPDS 的优先级可明显低于 A、B 组。
+  </div>
+
+  <div class="order">
+    <strong>建议落地顺序（ROI 视角）：</strong>
+    <ol>
+      <li><b>A1 标签点击筛选</b> → A2 自动备份 → A3 封面抓取（三者改动小、当天可上线）</li>
+      <li><b>A4 统计仪表盘</b>（一次性读数据，性价比高）</li>
+      <li><b>B5 在线阅读器</b>（体验质变，但工期最大，建议单独排期）</li>
+      <li>B6 智能书架 / B7 阅读进度 → 按需</li>
+      <li>C 组（OPDS / 多用户 / 多格式）按真实需求再定</li>
+    </ol>
+  </div>
+
+  <footer>对比基于 2026-08 主流书库程序公开功能 ｜ 评估对象：Shelfmark（Flask 版，当前 50 本藏书）｜ 任一条均可让我直接实现</footer>
+</div>
+</body>
+</html>

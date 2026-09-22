@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Shelfmark{% endblock %}</title>
+  <!-- 本地化 Bootstrap，不依赖 CDN -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+  <style>
+    /* ============ BookLore 风格深色主题 ============ */
+    :root {
+      --bl-bg: #0d1012;          /* 页面背景 (BookLore --ground-background) */
+      --bl-panel: #1a1e21;       /* 侧边栏 / 面板 (BookLore --card-background) */
+      --bl-card: #1a1e21;        /* 卡片 */
+      --bl-card-hover: #34393e;  /* 悬停面 (BookLore --p-surface-800) */
+      --bl-border: #464f56;      /* 边框 (BookLore --p-surface-700) */
+      --bl-accent: #4ade80;      /* 主强调色 (BookLore 标志性绿 --p-primary-color) */
+      --bl-accent-strong: #22c55e;
+      --bl-accent-soft: rgba(74, 222, 128, .14);
+      --bl-orange: #fb923c;      /* 元数据按钮 (BookLore --p-button-warn) */
+      --bl-blue: #6495ed;        /* 作者链接 */
+      --bl-text: #ffffff;
+      --bl-muted: #b4bcc7;       /* (BookLore --text-color-secondary) */
+      --bl-radius: 12px;
+      --bl-radius-sm: 6px;
+    }
+    /* 覆盖 Bootstrap dark 变量，统一到 BookLore 配色 */
+    [data-bs-theme="dark"] {
+      --bs-body-bg: var(--bl-bg);
+      --bs-body-color: var(--bl-text);
+      --bs-body-font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      --bs-border-color: var(--bl-border);
+      --bs-secondary-color: var(--bl-muted);
+      --bs-primary: var(--bl-accent);
+      --bs-primary-rgb: 74, 222, 128;
+      --bs-emphasis-color: #fff;
+      --bs-secondary-bg: var(--bl-panel);
+      --bs-tertiary-bg: var(--bl-card);
+      --bs-card-bg: var(--bl-card);
+      --bs-card-color: var(--bl-text);
+    }
+    * { scrollbar-width: thin; scrollbar-color: #39435a transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #39435a; border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    body { background: var(--bl-bg); }
+
+    /* ============ 整体布局：侧边栏 + 主区 ============ */
+    .bl-app { display: flex; min-height: 100vh; }
+    .bl-sidebar {
+      width: 236px; position: fixed; inset: 0 auto 0 0; z-index: 1030;
+      background: var(--bl-panel); border-right: 1px solid var(--bl-border);
+      display: flex; flex-direction: column; padding: 18px 14px;
+    }
+    .bl-main { flex: 1; margin-left: 236px; display: flex; flex-direction: column; min-width: 0; }
+
+    /* 侧边栏 Logo —— 贴紧标题 */
+    .bl-logo { display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px; }
+    .bl-logo-badge {
+      width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto;
+      overflow: hidden; display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(74,222,128,.28);
+      box-shadow: 0 0 14px rgba(74,222,128,.10);
+    }
+    .bl-logo-badge img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .bl-logo-name { font-weight: 700; font-size: 15px; letter-spacing: .3px; line-height: 1.2; }
+    .bl-logo-sub { font-size: 11px; color: var(--bl-muted); line-height: 1.2; }
+
+    /* 侧边栏导航 */
+    .bl-nav-group { margin: 14px 0 4px; padding: 0 8px; }
+    .bl-nav-group-title {
+      font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--bl-muted); margin-bottom: 6px; font-weight: 600;
+    }
+    /* 可折叠分组（书架 / 管理）：标题可点击，箭头旋转展开 */
+    .bl-nav-group-toggle {
+      display: flex; align-items: center; gap: 5px;
+      background: none; border: none; width: 100%; text-align: left;
+      padding: 3px 0; cursor: pointer;
+    }
+    .bl-nav-group-toggle:hover { color: var(--bl-text); }
+    .bl-nav-caret { display: inline-block; transition: transform .15s ease; font-size: 10px; }
+    .bl-nav-group-toggle.open .bl-nav-caret { transform: rotate(90deg); }
+    .bl-nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border-radius: 8px; color: var(--bl-text); text-decoration: none;
+      font-size: 13.5px; margin-bottom: 2px; transition: background .12s;
+    }
+    .bl-nav-item:hover { background: rgba(255,255,255,.05); color: #fff; }
+    .bl-nav-item.active { background: var(--bl-accent-soft); color: var(--bl-accent); font-weight: 600; }
+    .bl-nav-ico { width: 18px; text-align: center; font-size: 14px; }
+    .bl-nav-count { margin-left: auto; font-size: 11.5px; color: var(--bl-muted); background: rgba(255,255,255,.06); padding: 1px 7px; border-radius: 20px; }
+    .bl-nav-item.active .bl-nav-count { color: var(--bl-accent); background: rgba(129,140,248,.15); }
+
+    /* 侧边栏「在线发布」区块 */
+    .bl-publish-box { margin: 10px 8px 0; padding: 10px 12px; background: var(--bl-panel); border: 1px solid var(--bl-border); border-radius: 10px; }
+    /* 固定在侧栏最底部（独立于管理分组），导航区超高时不被推走 */
+    .bl-publish-box-foot { margin: 14px 8px 4px; }
+    .bl-publish-title { font-size: 12px; font-weight: 600; color: var(--bl-text); margin-bottom: 6px; }
+    .bl-publish-meta { font-size: 11px; color: var(--bl-muted); line-height: 1.7; word-break: break-all; }
+    .bl-publish-btn {
+      width: 100%; margin-top: 8px; padding: 7px 0; border-radius: 8px; cursor: pointer;
+      background: var(--bl-accent); border: 1px solid var(--bl-accent); color: #0d1012;
+      font-size: 12.5px; font-weight: 600;
+    }
+    .bl-publish-btn:hover { background: #a5b4fc; border-color: #a5b4fc; }
+    .bl-publish-btn:disabled { opacity: .6; cursor: wait; }
+    .bl-publish-msg { font-size: 11px; margin-top: 6px; line-height: 1.6; word-break: break-all; }
+    .bl-publish-msg.ok { color: var(--green); }
+    .bl-publish-msg.err { color: #f87171; }
+    .bl-nav-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+    /* 侧栏中部导航区：超高时内部滚动，底部（在线发布 + footer）保持固定可见 */
+    .bl-nav-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; margin: 0 -14px; padding: 0 14px; scrollbar-width: thin; scrollbar-color: var(--bl-border) transparent; }
+    .bl-nav-scroll::-webkit-scrollbar { width: 5px; }
+    .bl-nav-scroll::-webkit-scrollbar-thumb { background: var(--bl-border); border-radius: 3px; }
+
+    .bl-sidebar-foot { padding: 10px 8px 2px; border-top: 1px solid var(--bl-border); font-size: 11px; color: var(--bl-muted); }
+
+    /* ============ 顶部栏 ============ */
+    .bl-topbar {
+      position: sticky; top: 0; z-index: 1020; height: 62px;
+      background: rgba(14, 17, 23, .86); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--bl-border);
+      display: flex; align-items: center; gap: 14px; padding: 0 22px;
+    }
+    .bl-topbar-title { font-size: 17px; font-weight: 700; white-space: nowrap; }
+    .bl-search { flex: 1; max-width: 460px; }
+    .bl-search .form-control {
+      background: var(--bl-card); border: 1px solid var(--bl-border);
+      border-radius: 20px; color: var(--bl-text); font-size: 13.5px; padding: 7px 16px 7px 38px;
+    }
+    .bl-search .form-control:focus { background: var(--bl-card); border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); }
+    .bl-search { position: relative; }
+    .bl-search .bl-search-ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--bl-muted); font-size: 14px; pointer-events: none; }
+    .bl-topbar .btn {
+      border-radius: 10px; font-size: 13px; padding: 6px 12px;
+      border: 1px solid var(--bl-border); background: var(--bl-card); color: var(--bl-text);
+    }
+    .bl-topbar .btn:hover { border-color: var(--bl-accent); color: var(--bl-accent); background: var(--bl-accent-soft); }
+    .bl-topbar .btn-bl-accent { background: var(--bl-accent); border-color: var(--bl-accent); color: #0b0d12; font-weight: 600; }
+    .bl-topbar .btn-bl-accent:hover { filter: brightness(1.08); color: #0b0d12; }
+
+    /* ============ 内容区 ============ */
+    .bl-content { flex: 1; padding: 24px 28px; min-width: 0; }
+
+    /* ============ 底部状态栏 ============ */
+    .bl-footer {
+      border-top: 1px solid var(--bl-border); padding: 10px 24px;
+      color: var(--bl-muted); font-size: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    /* ============ 封面墙 ============ */
+    .bl-section-title { font-size: 15px; font-weight: 700; margin: 4px 0 14px; display: flex; align-items: center; gap: 8px; }
+    .bl-section-title .text-muted { font-size: 12.5px; font-weight: 400; }
+    .bl-shelf { display: flex; gap: 18px; overflow-x: auto; padding: 6px 2px 14px; scroll-snap-type: x proximity; }
+    .bl-book { width: 148px; flex: 0 0 auto; scroll-snap-align: start; text-decoration: none; color: inherit; }
+    .bl-book-cover {
+      aspect-ratio: 2 / 3; border-radius: var(--bl-radius); overflow: hidden;
+      background: #232b3d; border: 1px solid var(--bl-border); position: relative;
+      box-shadow: 0 4px 14px rgba(0,0,0,.35); transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .bl-book-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .bl-book:hover .bl-book-cover { transform: translateY(-4px); box-shadow: 0 10px 22px rgba(0,0,0,.5); border-color: var(--bl-accent); }
+    .bl-book-title { font-size: 13px; font-weight: 600; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bl-book-author { font-size: 12px; color: var(--bl-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 封面墙勾选框：悬停显示，选中后保持显示 */
+    .bl-book-check {
+      position: absolute; top: 8px; left: 8px; z-index: 3; margin: 0 !important;
+      cursor: pointer; opacity: 0; transition: opacity .12s;
+    }
+    .bl-book:hover .bl-book-check, .bl-book-check:checked { opacity: 1; }
+
+    /* ============ 封面网格（全部/筛选结果）============ */
+    .bl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 22px 18px; }
+
+    /* ============ 通用卡片 / 面板 ============ */
+    .bl-card { background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); }
+    .bl-panel { background: var(--bl-panel); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); }
+    .bl-table th { color: var(--bl-muted); font-weight: 600; font-size: 12.5px; }
+    .bl-table td { font-size: 13.5px; }
+    .bl-table tr:hover td { background: rgba(255,255,255,.03); }
+
+    /* 折叠筛选面板 */
+    .bl-filter-toggle { font-size: 13px; color: var(--bl-muted); background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: 20px; padding: 5px 14px; }
+    .bl-filter-toggle:hover { color: var(--bl-accent); border-color: var(--bl-accent); }
+
+    /* 详情页大封面 */
+    .bl-cover-lg { border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.5); }
+
+    /* ============ 详情页（对标 BookLore 概览视图）============ */
+    /* 顶部视图页签：仅保留本工具支持的视图 */
+    .bl-viewtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--bl-border); margin-bottom: 22px; flex-wrap: wrap; }
+    .bl-viewtab {
+      padding: 14px 16px; font-size: 14px; font-weight: 600; color: var(--bl-muted);
+      text-decoration: none; border-bottom: 1px solid transparent; margin-bottom: -1px;
+      cursor: pointer; transition: color .12s;
+    }
+    .bl-viewtab:hover { color: var(--bl-text); }
+    .bl-viewtab.active { color: var(--bl-accent); border-bottom-color: var(--bl-accent); }
+
+    /* 两栏主体：封面 | 右区域（标题 + 行式信息 + 简介） */
+    .bl-detail-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 28px; align-items: start; }
+    @media (max-width: 1120px) { .bl-detail-grid { grid-template-columns: 1fr; } .bl-detail-cover { max-width: 240px; } }
+
+    /* 左栏：封面 + 操作 */
+    .bl-detail-cover-wrap { position: relative; display: inline-block; width: 100%; }
+    .bl-detail-cover { width: 100%; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.5); display: block; }
+    /* 封面右上角状态角标 */
+    .bl-detail-status {
+      position: absolute; top: 10px; right: 10px; z-index: 2;
+      font-size: 11px; padding: 3px 10px; border-radius: 999px;
+      background: rgba(13,16,18,.82); color: #4ade80;
+      border: 1px solid rgba(74,222,128,.45);
+    }
+    /* 左栏文件缺失提示 */
+    .bl-detail-missing {
+      margin-top: 14px; font-size: 12px; color: #f87171; text-align: center;
+      padding: 8px; border: 1px dashed rgba(248,113,113,.4); border-radius: 8px;
+    }
+    .bl-detail-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+    .bl-detail-actions .btn { border-radius: 8px; font-weight: 600; font-size: 13.5px; padding: 9px 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    /* 行式信息列表（杂志风）：两列、分隔线 */
+    .bl-detail-info { margin-top: 18px; border-top: 1px solid var(--bl-border); }
+    .bl-info-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 10px 2px; border-bottom: 1px solid var(--bl-border); }
+    @media (max-width: 640px) { .bl-info-row { grid-template-columns: 1fr; } }
+    .bl-info-item { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .bl-info-label { flex-shrink: 0; width: 60px; font-size: 12px; color: var(--bl-muted); }
+    .bl-info-value { font-size: 13px; color: var(--bl-text); word-break: break-word; }
+    .bl-info-value code { color: #a5b4fc; font-size: 12px; word-break: break-all; }
+    .bl-info-value a { color: var(--bl-accent); text-decoration: none; }
+    .bl-info-value a:hover { text-decoration: underline; }
+
+    /* 翻书导航（详情页底部：上一本 / 位置 / 下一本） */
+    .bl-book-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 22px 0 6px; flex-wrap: wrap; }
+    .bl-book-nav-pos { font-size: 13px; color: var(--bl-muted); white-space: nowrap; }
+
+    /* 简介卡全宽 + 间距 */
+    .bl-desc-card { margin-top: 18px; }
+
+    /* 操作按钮（阅读=绿 / 下载·编辑=线框 / 删除=红色线框）*/
+    .bl-btn-read { background: var(--bl-accent); border: 1px solid var(--bl-accent); color: #0d1012; }
+    .bl-btn-read:hover { background: #86efac; border-color: #86efac; color: #0d1012; }
+    .bl-btn-outline { background: transparent; border: 1px solid var(--bl-border); color: var(--bl-text); }
+    .bl-btn-outline:hover { border-color: var(--bl-accent); color: var(--bl-accent); }
+    .bl-btn-orange { background: transparent; border: 1px solid var(--bl-orange); color: var(--bl-orange); }
+    .bl-btn-orange:hover { background: rgba(251, 146, 60, .12); color: var(--bl-orange); }
+    .bl-btn-danger-outline { background: transparent; border: 1px solid #f87171; color: #f87171; }
+    .bl-btn-danger-outline:hover { background: rgba(248, 113, 113, .12); color: #f87171; }
+
+    /* 右栏信息 */
+    .bl-detail-title { font-size: 26px; font-weight: 800; color: #fff; line-height: 1.2; margin: 0; }
+    .bl-detail-subtitle { font-size: 16px; color: var(--bl-muted); font-weight: 500; margin-top: 5px; }
+    .bl-detail-author { color: var(--bl-blue); font-size: 15.75px; text-decoration: none; }
+    .bl-detail-author:hover { text-decoration: underline; }
+    .bl-format-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 9999px; font-size: 10.5px; font-weight: 500; background: #16a34a; color: #fff; border: 1px solid #22c55e; letter-spacing: .3px; }
+    /* 国籍徽标（详情页作者旁） */
+    .bl-nat-badge {
+      display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 500; vertical-align: 2px;
+      color: var(--bl-accent); background: rgba(129,140,248,.1);
+      border: 1px solid rgba(129,140,248,.3);
+    }
+
+    /* 标签 chips（对标 BookLore 类型标签）*/
+    .bl-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .bl-tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--bl-muted); background: rgba(255,255,255,.06); border: 1px solid var(--bl-border); }
+    /* 可点击标签（详情页信息方格内，点击即按该标签筛选）*/
+    .bl-tag-link {
+      display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 6px;
+      font-size: 11.5px; font-weight: 500; margin: 2px 6px 2px 0;
+      color: var(--bl-accent); background: rgba(74,222,128,.08);
+      border: 1px solid rgba(74,222,128,.3); text-decoration: none; transition: background .12s;
+    }
+    .bl-tag-link:hover { background: rgba(74,222,128,.18); text-decoration: underline; }
+
+    /* 详情页「加入书架」控件 */
+    .bl-shelf-add { display: flex; gap: 6px; margin-top: 14px; }
+    .bl-shelf-add .form-select { flex: 1; background: var(--bl-card); border: 1px solid var(--bl-border); color: var(--bl-text); font-size: 12.5px; border-radius: 8px; padding: 6px 8px; }
+    .bl-shelf-add .form-select:focus { border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); }
+    .bl-shelf-add .btn { padding: 6px 10px; border-radius: 8px; }
+    .bl-shelf-add-hint { font-size: 11.5px; margin-top: 6px; }
+    .bl-shelf-add-hint a { color: var(--bl-muted); text-decoration: none; }
+    .bl-shelf-add-hint a:hover { color: var(--bl-accent); }
+
+    /* 详情页左侧「书架」面板：已加入 + 加入更多 */
+    .bl-shelf-panel { margin-top: 18px; background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); padding: 14px 16px; }
+    .bl-shelf-panel-title { font-size: 13px; font-weight: 600; color: var(--bl-text); margin-bottom: 10px; }
+    /* 面板内标签行（标签 · 书架合并区）*/
+    .bl-owner-tags { margin-bottom: 10px; }
+    /* 已加入书架：5 列排布，最多约 5 行，超出内部滚动（书架再多也不拉长页面）*/
+    .bl-shelf-joined { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; max-height: 168px; overflow-y: auto; }
+    .bl-shelf-chip { display: flex; align-items: center; gap: 4px; background: rgba(74,222,128,.08); border: 1px solid rgba(74,222,128,.25); border-radius: 999px; padding: 3px 4px 3px 12px; font-size: 12.5px; min-width: 0; }
+    .bl-shelf-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; color: var(--bl-accent); text-decoration: none; }
+    .bl-shelf-chip-name:hover { color: var(--bl-accent); text-decoration: underline; }
+    .bl-shelf-chip-rm { margin: 0; flex-shrink: 0; }
+    .bl-shelf-chip-rm button { background: transparent; border: none; color: var(--bl-muted); cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 999px; }
+    .bl-shelf-chip-rm button:hover { background: rgba(248,113,113,.18); color: #f87171; }
+    .bl-shelf-empty { font-size: 12px; color: var(--bl-muted); margin-bottom: 8px; }
+    .bl-shelf-add-form { margin-top: 4px; }
+    /* 加入更多：5 列排布，同样限高滚动 */
+    .bl-shelf-add-list { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-height: 168px; overflow-y: auto; margin-bottom: 10px; }
+    .bl-shelf-add-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--bl-text); cursor: pointer; padding: 3px 4px; border-radius: 6px; min-width: 0; }
+    .bl-shelf-add-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bl-shelf-add-item:hover { background: rgba(129,140,248,.08); }
+    .bl-shelf-add-item input { accent-color: var(--bl-accent); flex-shrink: 0; }
+
+    /* 详情页标题行：书名 + 右对齐「加入书架」 */
+    .bl-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+    .bl-title-main { min-width: 0; }
+    .bl-title-side { flex: 0 0 auto; margin-top: 4px; }
+    .bl-shelf-add-inline { display: flex; gap: 6px; align-items: center; }
+    .bl-shelf-add-inline .form-select { width: auto; min-width: 150px; background: var(--bl-card); border: 1px solid var(--bl-border); color: var(--bl-text); font-size: 12.5px; border-radius: 8px; padding: 6px 8px; }
+    .bl-shelf-add-inline .form-select:focus { border-color: var(--bl-accent); box-shadow: 0 0 0 3px var(--bl-accent-soft); }
+
+    /* 简介 / 描述 */
+    .bl-desc-card { background: var(--bl-card); border: 1px solid var(--bl-border); border-radius: var(--bl-radius); padding: 16px 20px; }
+    .bl-desc-title { font-size: 12.25px; font-weight: 600; color: #fff; margin-bottom: 10px; }
+    .bl-desc-text { color: var(--bl-muted); font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; }
+    .bl-desc-refresh { float: right; color: var(--bl-muted); font-size: 13px; text-decoration: none; line-height: 1; }
+    .bl-desc-refresh:hover { color: var(--bl-accent); }
+    .bl-desc-src { margin-top: 10px; font-size: 11px; color: var(--bl-muted); }
+    /* 元数据中的可点击作者链接 */
+    .bl-meta-link { color: var(--bl-accent); text-decoration: none; }
+    .bl-meta-link:hover { text-decoration: underline; }
+
+    /* 底部：相似图书（内容推荐算法联动）*/
+    .bl-bottomtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--bl-border); margin: 30px 0 18px; flex-wrap: wrap; }
+    .bl-bottomtab { padding: 14px 16px; font-size: 14px; font-weight: 600; color: var(--bl-muted); border-bottom: 1px solid transparent; margin-bottom: -1px; }
+    .bl-bottomtab.active { color: var(--bl-accent); border-bottom-color: var(--bl-accent); }
+
+    @media (max-width: 900px) {
+      .bl-sidebar { display: none; }
+      .bl-main { margin-left: 0; }
+      .bl-topbar-title { display: none; }
+    }
+  </style>
+</head>
+<body class="bl-app">
+
+  <!-- ============ 左侧导航栏 ============ -->
+  <aside class="bl-sidebar">
+    <a class="bl-logo text-decoration-none" href="{{ url_for('index') }}">
+      <span class="bl-logo-badge"><img src="{{ url_for('static', filename='images/shelfmark_logo.png') }}" alt="Shelfmark"></span>
+      <span>
+        <div class="bl-logo-name" style="color:#fff">Shelfmark</div>
+        <div class="bl-logo-sub">私人书库</div>
+      </span>
+    </a>
+
+    <div class="bl-nav-scroll">
+    <div class="bl-nav-group">
+      <div class="bl-nav-group-title">书库</div>
+      <a class="bl-nav-item {{ 'active' if request.endpoint == 'index' and not request.args.get('status') else '' }}"
+         href="{{ url_for('index') }}"><span class="bl-nav-ico">🏠</span>首页</a>
+      <a class="bl-nav-item {{ 'active' if request.endpoint == 'all_books' else '' }}"
+         href="{{ url_for('all_books') }}"><span class="bl-nav-ico">📚</span>全部书籍<span class="bl-nav-count">{{ lib_total }}</span></a>
+      <a class="bl-nav-item {{ 'active' if request.endpoint == 'series_view' else '' }}"
+         href="{{ url_for('series_view') }}"><span class="bl-nav-ico">🗂</span>丛书</a>
+    </div>
+
+    <div class="bl-nav-group">
+      <div class="bl-nav-group-title">状态</div>
+      {% for s in ['在读', '未读', '已读', '搁置'] %}
+      <a class="bl-nav-item {{ 'active' if request.args.get('status') == s else '' }}"
+         href="{{ url_for('index', status=s) }}">
+        <span class="bl-nav-ico">{% if s == '在读' %}📖{% elif s == '未读' %}📕{% elif s == '已读' %}✅{% else %}⏸{% endif %}</span>
+        {{ s }}<span class="bl-nav-count">{{ lib_status_counts.get(s, 0) }}</span>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="bl-nav-group">
+      <button class="bl-nav-group-title bl-nav-group-toggle" type="button"
+              data-target="navShelf" aria-expanded="false">
+        <span class="bl-nav-caret">▸</span>书架
+      </button>
+      <div class="bl-nav-collapse" id="navShelf" hidden>
+        <a class="bl-nav-item {{ 'active' if request.endpoint == 'shelves_view' and request.args.get('kind') != 'smart' else '' }}"
+           href="{{ url_for('shelves_view') }}"><span class="bl-nav-ico">📚</span>我的书架</a>
+        {% for sh in nav_shelves %}
+        <a class="bl-nav-item {{ 'active' if request.endpoint == 'shelf_detail' and request.view_args.get('shelf_id') == sh.id else '' }}"
+           href="{{ url_for('shelf_detail', shelf_id=sh.id) }}">
+          <span class="bl-nav-ico">{{ '✨' if sh.kind == 'smart' else '📚' }}</span>
+          <span class="bl-nav-text">{{ sh.name }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="bl-nav-group">
+      <button class="bl-nav-group-title bl-nav-group-toggle" type="button"
+              data-target="navAdmin" aria-expanded="false">
+        <span class="bl-nav-caret">▸</span>管理
+      </button>
+      <div class="bl-nav-collapse" id="navAdmin" hidden>
+        <a class="bl-nav-item {{ 'active' if request.endpoint == 'book_add' else '' }}"
+           href="{{ url_for('book_add') }}"><span class="bl-nav-ico">➕</span>新增书籍</a>
+        <a class="bl-nav-item {{ 'active' if request.endpoint == 'import_books' else '' }}"
+           href="{{ url_for('import_books') }}"><span class="bl-nav-ico">🧰</span>工具合集</a>
+        <a class="bl-nav-item {{ 'active' if request.endpoint == 'stats_view' else '' }}"
+           href="{{ url_for('stats_view') }}"><span class="bl-nav-ico">📊</span>统计仪表盘</a>
+      </div>
+    </div>
+    </div>
+
+    <!-- 在线发布（固定于侧栏最底部，独立于管理分组） -->
+    <div class="bl-publish-box bl-publish-box-foot">
+      <div class="bl-publish-title">🌐 在线发布</div>
+      {% if publish_state and publish_state.last_time %}
+      <div class="bl-publish-meta" id="pubMetaTime">上次发布：{{ publish_state.last_time[:16] }}</div>
+      <div class="bl-publish-meta" id="pubMetaCount">更新：{{ publish_state.added }} 新增 · {{ publish_state.removed }} 移除 · {{ publish_state.changed }} 变化 · 共 {{ publish_state.total }} 本</div>
+      {% else %}
+      <div class="bl-publish-meta" id="pubMetaTime">尚未发布过</div>
+      <div class="bl-publish-meta" id="pubMetaCount"></div>
+      {% endif %}
+      <button class="bl-publish-btn" id="btnPublish" type="button">🚀 发布到在线站</button>
+      <div class="bl-publish-msg" id="publishMsg"></div>
+    </div>
+
+    <div class="bl-sidebar-foot">v1.1 · 本地书库<br>数据保存在 data/library.json</div>
+  </aside>
+
+  <!-- ============ 主区域 ============ -->
+  <div class="bl-main">
+    <!-- 顶部栏：标题 + 搜索 + 动作按钮 -->
+    <header class="bl-topbar">
+      <div class="bl-topbar-title">{% block topbar_title %}{% endblock %}</div>
+      <form class="bl-search" method="get" action="{{ url_for('index') }}">
+        {% block topbar_search_hidden %}{% endblock %}
+        <span class="bl-search-ico">🔍</span>
+        <input type="text" class="form-control" name="q" value="{{ request.args.get('q', '') }}"
+               placeholder="搜索书名 / 副标题 / 作者 / ISBN…">
+      </form>
+      <div class="d-flex gap-2 ms-auto">
+        <a class="btn" href="{{ url_for('book_add') }}">➕ 新增</a>
+        <a class="btn" href="{{ url_for('import_books') }}">📥 导入</a>
+        <a class="btn btn-bl-accent" href="{{ url_for('export_json') }}">⬇ 导出</a>
+      </div>
+    </header>
+
+    <!-- 内容区 -->
+    <main class="bl-content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+          </div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- 底部状态栏 -->
+    <footer class="bl-footer">
+      <span>📚 {{ app_name }} v{{ app_version }}</span>
+      <span>共 {{ lib_total }} 本 · {% for s in ['在读','未读','已读','搁置'] %}{{ s }} {{ lib_status_counts.get(s, 0) }} {% endfor %}</span>
+    </footer>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+  <script>
+    // Bootstrap JS 未加载时的兜底：点击关闭按钮收起提示
+    document.querySelectorAll('.alert .btn-close').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        btn.closest('.alert').style.display = 'none';
+      });
+    });
+
+    // 「发布到在线站」：调用后端导出+推送，并刷新显示
+    var btnPublish = document.getElementById('btnPublish');
+    if (btnPublish) {
+      btnPublish.addEventListener('click', function () {
+        var btn = this;
+        var msg = document.getElementById('publishMsg');
+        btn.disabled = true;
+        btn.textContent = '发布中…（导出+推送，约 10-60 秒）';
+        msg.className = 'bl-publish-msg';
+        msg.textContent = '正在导出书库并推送到 GitHub…';
+        fetch('{{ url_for("publish_online") }}', { method: 'POST' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            msg.textContent = d.message || (d.ok ? '发布成功' : '发布失败');
+            msg.className = 'bl-publish-msg ' + (d.ok ? 'ok' : 'err');
+            if (d.ok) {
+              var t = document.getElementById('pubMetaTime');
+              var c = document.getElementById('pubMetaCount');
+              if (t) { t.textContent = '上次发布：' + (d.last_time || '').slice(0, 16); }
+              if (c) { c.textContent = '更新：' + d.added + ' 新增 · ' + d.removed + ' 移除 · ' + d.changed + ' 变化 · 共 ' + d.total + ' 本'; }
+            }
+          })
+          .catch(function () {
+            msg.textContent = '请求失败（服务未启动或超时）';
+            msg.className = 'bl-publish-msg err';
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = '🚀 发布到在线站';
+          });
+      });
+    }
+
+    // 侧边栏可折叠分组（书架 / 管理）：点标题箭头展开/收起，状态记忆在 localStorage
+    document.querySelectorAll('.bl-nav-group-toggle').forEach(function (btn) {
+      var box = document.getElementById(btn.getAttribute('data-target'));
+      if (!box) { return; }
+      var key = 'navfold_' + btn.getAttribute('data-target');
+      // 默认收起；若组内当前有高亮项则自动展开
+      var open = box.querySelector('.active') !== null ||
+                 localStorage.getItem(key) === '1';
+      function apply() {
+        box.hidden = !open;
+        btn.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      apply();
+      btn.addEventListener('click', function () {
+        open = !open;
+        localStorage.setItem(key, open ? '1' : '0');
+        apply();
+      });
+    });
+  </script>
+</body>
+</html>

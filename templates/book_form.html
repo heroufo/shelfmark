@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑书籍' if is_edit else '新增书籍' }} - Shelfmark{% endblock %}
+{% block topbar_title %}{{ '编辑《' + book.title + '》' if is_edit else '新增书籍' }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="bl-card">
+      <div class="p-4">
+        <form method="post" action="{{ url_for('book_edit', book_id=book.book_id) if is_edit else url_for('book_add') }}">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">书名 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="title" value="{{ vals.title }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">副标题</label>
+              <input type="text" class="form-control" name="subtitle" value="{{ vals.subtitle }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">作者</label>
+              <input type="text" class="form-control" name="author" value="{{ vals.author }}" placeholder="作者名">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">作者国籍</label>
+              <input type="text" class="form-control" name="author_nationality" value="{{ vals.author_nationality }}" placeholder="留空自动按文件名解析">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">丛书名</label>
+              <input type="text" class="form-control" name="series" value="{{ vals.series }}" placeholder="如：三体">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">卷号</label>
+              <input type="text" class="form-control" name="series_number" value="{{ vals.series_number }}" placeholder="如：1">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">出版社</label>
+              <input type="text" class="form-control" name="publisher" value="{{ vals.publisher }}" placeholder="如：中信出版集团">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">出版年</label>
+              <input type="text" class="form-control" name="publish_year" value="{{ vals.publish_year }}" placeholder="如：2020">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">页数</label>
+              <input type="text" class="form-control" name="pages" value="{{ vals.pages }}" placeholder="如：320">
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">ISBN</label>
+              <div class="input-group">
+                <input type="text" class="form-control" name="isbn" id="isbnInput"
+                       value="{{ vals.isbn }}" placeholder="如：9787521717693">
+                <button type="button" class="btn btn-outline-secondary" id="btnDoubanMeta">🔍 豆瓣查询</button>
+              </div>
+              <div class="form-text" style="color:var(--bl-muted)">填写 ISBN 后点「豆瓣查询」自动获取书名 / 作者 / 出版年 / 出版社（仅回填空字段）</div>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">文件路径</label>
+              <div class="input-group">
+                <input type="text" class="form-control" name="file_path" id="filePathInput"
+                       value="{{ vals.file_path }}" placeholder="如：C:\Books\xxx.pdf">
+                <button type="button" class="btn btn-outline-secondary" id="btnBrowseFile">📂 浏览…</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">文件格式</label>
+              <select class="form-select" name="file_format">
+                <option value="">自动识别</option>
+                {% for f in format_options %}
+                <option value="{{ f }}" {{ 'selected' if vals.file_format == f else '' }}>{{ f }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">封面</label>
+              <div class="input-group">
+                <input type="text" class="form-control" name="cover_path" id="coverPathInput"
+                       value="{{ vals.cover_path }}" placeholder="本地图片路径 / http(s) 链接，或点右侧上传">
+                <button type="button" class="btn btn-outline-secondary" id="btnUploadCover">🖼 上传图片…</button>
+                <input type="file" id="coverFileInput" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.bmp" style="display:none">
+              </div>
+              <div class="mt-2 d-flex align-items-center gap-2">
+                <img id="coverPreview" src="{{ cover_url({'cover_path': vals.cover_path}) }}" alt="封面预览"
+                     style="width:56px;height:76px;object-fit:cover;border-radius:6px;border:1px solid var(--bl-border)">
+                <span class="small" style="color:var(--bl-muted)">封面预览</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">评分</label>
+              <select class="form-select" name="rating">
+                {% for r in rating_options %}
+                <option value="{{ r }}" {{ 'selected' if vals.rating == r|string else '' }}>{{ '★' * r if r else '未评分' }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-9">
+              <label class="form-label">标签（用逗号分隔）</label>
+              <input type="text" class="form-control" name="tags" value="{{ vals.tags_str }}" placeholder="科幻, 经典, 收藏">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">阅读状态</label>
+              <select class="form-select" name="status">
+                {% for s in status_options %}
+                <option value="{{ s }}" {{ 'selected' if vals.status == s else '' }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">备注</label>
+              <textarea class="form-control" name="notes" rows="3">{{ vals.notes }}</textarea>
+            </div>
+          </div>
+
+          {% if is_edit and book.file_path %}
+          <div class="alert alert-light border small mt-3 mb-0" style="background:var(--bl-panel);color:var(--bl-text)">
+            📄 当前文件：<code style="color:#a5b4fc">{{ book.file_path }}</code>
+            {% if file_exists(book.file_path) %}<span class="text-success">（存在）</span>
+            {% else %}<span class="text-danger">（缺失）</span>{% endif %}
+          </div>
+          {% endif %}
+
+          <div class="mt-4 d-flex gap-2">
+            <button type="submit" class="btn btn-bl-accent">保存</button>
+            <a href="{{ url_for('book_detail', book_id=book.book_id) if is_edit else url_for('index') }}" class="btn btn-outline-secondary">取消</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 「浏览…」按钮：调用后端接口弹出系统原生文件选择框，回填路径并自动识别格式
+  document.getElementById('btnBrowseFile').addEventListener('click', function () {
+    var btn = this;
+    var input = document.getElementById('filePathInput');
+    var fmt = document.querySelector('select[name="file_format"]');
+    btn.disabled = true;
+    btn.textContent = '打开中…';
+    // 超时兜底：对话框若长时间无响应（如被遮挡），自动放弃并恢复按钮，避免页面卡死
+    var ctrl = ('AbortController' in window) ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (ctrl) { ctrl.abort(); }
+      else { alert('文件选择器响应超时，请检查是否弹出了系统对话框或在后台窗口'); }
+    }, 120000);
+    var fetchOpts = ctrl ? { signal: ctrl.signal } : {};
+    fetch('{{ url_for("api_browse_file") }}', fetchOpts)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok && data.path) {
+          input.value = data.path;
+          var ext = data.path.split('.').pop().toLowerCase();
+          // 文件格式为「自动识别」且扩展名可识别时自动补全
+          if (!fmt.value && ['pdf', 'epub', 'mobi'].indexOf(ext) !== -1) {
+            fmt.value = ext;
+          }
+        } else {
+          alert(data.message || '未选择文件');
+        }
+      })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') {
+          alert('文件选择器响应超时，请检查是否弹出了系统对话框（可能在后台窗口）');
+        } else {
+          alert('打开文件选择器失败，请手动输入路径');
+        }
+      })
+      .finally(function () {
+        clearTimeout(timer);
+        btn.disabled = false;
+        btn.textContent = '📂 浏览…';
+      });
+  });
+
+  // 「豆瓣查询」按钮：按 ISBN 从豆瓣获取书名/作者/出版年/出版社，仅回填空字段
+  document.getElementById('btnDoubanMeta').addEventListener('click', function () {
+    var btn = this;
+    var isbn = document.getElementById('isbnInput').value.trim();
+    if (!isbn) { alert('请先填写 ISBN'); return; }
+    btn.disabled = true;
+    btn.textContent = '查询中…';
+    var ctrl = ('AbortController' in window) ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (ctrl) { ctrl.abort(); }
+      else { alert('豆瓣查询超时，请稍后重试'); }
+    }, 120000);
+    var fetchOpts = ctrl ? { signal: ctrl.signal } : {};
+    fetch('{{ url_for("api_book_meta") }}?isbn=' + encodeURIComponent(isbn), fetchOpts)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) { alert(data.message || '查询失败'); return; }
+        // 只回填空字段：书名 / 作者 / 出版社 / 出版年 / 页数（国籍由文件名规则自动解析）
+        var fields = [
+          { name: 'title', label: '书名' },
+          { name: 'author', label: '作者' },
+          { name: 'publisher', label: '出版社' },
+          { name: 'publish_year', label: '出版年' },
+          { name: 'pages', label: '页数' }
+        ];
+        var filled = [], kept = [];
+        fields.forEach(function (f) {
+          var el = document.querySelector('input[name="' + f.name + '"]');
+          if (!el) { return; }
+          if (!el.value.trim() && data[f.name]) {
+            el.value = data[f.name];
+            filled.push(f.label);
+          } else {
+            kept.push(f.label);
+          }
+        });
+        var msg = '✅ 已从豆瓣获取信息，回填：' + (filled.join('、') || '（无空字段）');
+        if (kept.length) { msg += '；已保留手填：' + kept.join('、'); }
+        alert(msg);
+      })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') {
+          alert('豆瓣查询超时，请稍后重试');
+        } else {
+          alert('豆瓣查询失败（网络或反爬限制），可稍后重试或手动填写');
+        }
+      })
+      .finally(function () {
+        clearTimeout(timer);
+        btn.disabled = false;
+        btn.textContent = '🔍 豆瓣查询';
+      });
+  });
+
+  // 「上传图片…」按钮：上传封面到服务器，回填路径并即时预览
+  var btnCover = document.getElementById('btnUploadCover');
+  var coverFile = document.getElementById('coverFileInput');
+  var coverPathInput = document.getElementById('coverPathInput');
+  var coverPreview = document.getElementById('coverPreview');
+
+  btnCover.addEventListener('click', function () {
+    coverFile.click();
+  });
+  coverFile.addEventListener('change', function () {
+    if (!coverFile.files.length) { return; }
+    var file = coverFile.files[0];
+    var fd = new FormData();
+    fd.append('file', file);
+    btnCover.disabled = true;
+    btnCover.textContent = '上传中…';
+    fetch('{{ url_for("api_upload_cover") }}', { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok && data.path) {
+          coverPathInput.value = data.path;
+          coverPreview.src = URL.createObjectURL(file);   // 即时预览
+        } else {
+          alert(data.message || '上传失败');
+        }
+      })
+      .catch(function () { alert('上传失败，请重试'); })
+      .finally(function () {
+        btnCover.disabled = false;
+        btnCover.textContent = '🖼 上传图片…';
+        coverFile.value = '';
+      });
+  });
+</script>
+{% endblock %}

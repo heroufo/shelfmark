@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ publisher }} - 出版社 - Shelfmark{% endblock %}
+{% block topbar_title %}出版社：{{ publisher }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 style="font-weight:700;margin:0">🏛 出版社：{{ publisher }}
+    <span class="text-muted" style="font-size:14px;font-weight:400">共 {{ total }} 本</span>
+  </h4>
+  <a href="{{ url_for('index') }}" class="btn btn-sm bl-btn-outline">← 返回书库</a>
+</div>
+
+{% if page_books %}
+<div class="bl-grid">
+  {% for b in page_books %}
+  <a class="bl-book" href="{{ url_for('book_detail', book_id=b.book_id) }}" title="{{ b.title }}">
+    <div class="bl-book-cover"><img src="{{ cover_url(b) }}" alt="封面"></div>
+    <div class="bl-book-title">{{ b.title }}</div>
+    <div class="bl-book-author">{{ b.author or '佚名' }}</div>
+  </a>
+  {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<nav class="d-flex justify-content-center mt-4">
+  <ul class="pagination pagination-sm">
+    <li class="page-item {{ 'disabled' if page <= 1 }}">
+      <a class="page-link" href="{{ url_for('publisher_view', publisher=publisher, page=page-1) }}">«</a>
+    </li>
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+      <li class="page-item {{ 'active' if p == page }}">
+        <a class="page-link" href="{{ url_for('publisher_view', publisher=publisher, page=p) }}">{{ p }}</a>
+      </li>
+      {% elif p == 2 or p == total_pages - 1 %}
+      <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+    {% endfor %}
+    <li class="page-item {{ 'disabled' if page >= total_pages }}">
+      <a class="page-link" href="{{ url_for('publisher_view', publisher=publisher, page=page+1) }}">»</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="text-center py-5" style="color:var(--bl-muted)">
+  <div style="font-size:48px;margin-bottom:10px">📭</div>
+  <p>该出版社暂无书籍。</p>
+</div>
+{% endif %}
+
+{% endblock %}

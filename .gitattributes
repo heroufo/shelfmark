@@ -1,0 +1,19 @@
+# 统一换行符：源码 LF，Windows 脚本 CRLF，二进制不做转换
+* text=auto
+
+*.py    text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.js    text eol=lf
+*.md    text eol=lf
+*.spec  text eol=lf
+
+*.bat   text eol=crlf
+*.vbs   text eol=crlf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.exe   binary
