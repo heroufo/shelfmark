@@ -7,11 +7,13 @@
 # =====================================================================
 import os
 
+from PyInstaller.utils.hooks import collect_submodules
+
 PROJECT = os.path.abspath(SPECPATH)   # spec 所在目录 = 项目根
 
 # 内置只读资源（模板 + 静态基础文件）。
-# 注意：static/covers（249 张封面）刻意不打包 —— 打包版封面外置于 exe 旁 covers/，
-#       见 app.py 的 RUNTIME_DIR / covers_external 路由。
+# 注意：static/covers（封面）刻意不打包 —— 打包版封面外置于 exe 旁 covers/，
+#       见 shelfmark/paths.py 的 RUNTIME_DIR 与 app.py 的 covers 转发路由。
 datas = [
     (os.path.join(PROJECT, "templates"), "templates"),
     (os.path.join(PROJECT, "static", "css"), "static/css"),
@@ -24,7 +26,8 @@ a = Analysis(
     pathex=[PROJECT],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    # 显式收集内部包（含 views 子包）：即使将来出现动态/条件导入也不会漏
+    hiddenimports=collect_submodules("shelfmark") + ["export_data"],
     hookspath=[],
     runtime_hooks=[],
     # 打包版不再依赖 tkinter（文件对话框已改用 Windows 原生 API），排除以减体积

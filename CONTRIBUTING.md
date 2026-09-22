@@ -2,23 +2,44 @@
 
 感谢你有兴趣改进 Shelfmark！本文档说明如何搭建环境、提交修改。
 
-## 目录结构
+## 代码结构（分层约定）
 
 ```
-.
-├── app.py                    # Flask 主程序（路由 + 业务逻辑 + 存储）
-├── export_data.py            # 导出「净化版」数据到在线只读浏览站
-├── file_dialog_helper.py     # 源码版：以子进程弹系统文件对话框（tkinter）
-├── make_icon.py              # 由 Logo 生成 exe 图标
-├── make_autostart.py         # 生成开机自启 VBS（Windows）
-├── shelfmark.spec            # PyInstaller 打包配置（单文件 exe）
-├── templates/                # Jinja2 模板（base.html 内含全部样式）
-├── static/                   # 本地化 Bootstrap、图标、默认封面；covers/ 为用户封面
-├── tools/                    # 开发辅助脚本（画 Logo、改品牌名、开源体检）
-├── tests/                    # 端到端测试脚本
-├── docs/                     # 设计文档
-└── data/                     # 【本地数据，不入库】书库 JSON、配置、日志
+app.py                    入口：创建 Flask app、注册路由、启动逻辑（约 300 行）
+shelfmark/                内部模块包
+  paths.py                运行模式与目录常量（「双基地」：打包版 / 源码版）
+  utils.py                通用纯函数（数值 / 标签 / 文本 / 时间）
+  storage.py              书库读写、原子保存、配置、站点目录解析
+  nationality.py          作者国籍（按文件名解析，离线）
+  metadata.py             在线元数据（豆瓣）抓取与解析
+  dialogs.py              系统原生文件 / 目录对话框、默认程序打开
+  books.py                排序、表单校验与构建、书架规则、标签统计
+  publishing.py           在线发布的数据差异计算
+  views/                  路由层，按领域分模块
+export_data.py            导出「净化版」数据到在线只读浏览站
+file_dialog_helper.py     源码版：以子进程弹系统文件对话框（tkinter）
+make_icon.py / make_autostart.py   图标生成 / 开机自启脚本生成
+shelfmark.spec            PyInstaller 打包配置（单文件 exe）
+start.bat / build_exe.bat Windows 一键启动 / 一键重新打包
+templates/ static/        Jinja2 模板与本地化静态资源
+tools/ tests/ docs/       开发辅助、测试、设计文档
+data/                     【本地数据，不入库】书库 JSON、配置、日志
 ```
+
+**依赖方向是单向的**（上层可依赖下层，反向不可）：
+
+```
+paths → utils → storage → nationality / metadata / dialogs → books → publishing
+                                        ↘  views/*（唯一接触 Flask 的地方）
+```
+
+两条硬规则：
+
+1. **新增路由请写进 `shelfmark/views/` 对应领域模块**，并在该模块的 `register(app)`
+   里用 `app.add_url_rule(规则, 端点名, 函数)` 注册。
+   端点名一旦被模板 `url_for()` 用到就**不能改**——`tests/test_routes.py` 会检查。
+2. **不要为了让代码看起来整齐而缩进搬动函数体**：视图函数刻意保持在模块顶层，
+   这样函数体里的多行字符串内容不会因为缩进而改变。
 
 ## 开发环境
 
@@ -50,20 +71,40 @@ python -m PyInstaller --noconfirm --clean --distpath dist_exe shelfmark.spec
 ## 代码风格
 
 - Python：4 空格缩进，PEP 8，模块/函数写中文 docstring（本项目中文注释为主）。
+- 私有辅助函数用 `_` 前缀；跨模块共用的放对应领域模块，**不要复制粘贴**。
 - 模板/前端：2 空格缩进，样式集中在 `templates/base.html`，避免引入 CDN。
-- 提交前请确保 `python -m py_compile app.py export_data.py` 通过。
+- 提交前请依次通过：
+
+```bash
+python tools/check_imports.py --strict    # 静态检查：用了却没 import 的名字
+python -m pytest                          # 单元测试（176 项，无需书库数据）
+```
 
 ## 测试
 
+四层，按需要选择：
+
 ```bash
-# 核心端点端到端（需先有 data/library.json，可空库）
-python tests/test_native_dialog.py     # 校验系统原生文件/目录对话框（会短暂弹窗）
-python tests/test_exe_browse.py        # 校验打包版 exe 的「浏览…」链路（需先打包）
-python tools/audit_opensource.py       # 开源就绪度自检（隐私/合规/结构）
+# 1) 单元测试：不需要书库，CI 必跑
+python -m pytest
+
+# 2) 路由基线：端点名 / URL 规则 / 模板 url_for 完整性
+python -m pytest tests/test_routes.py
+
+# 3) 真实书库端到端（本机有 data/library.json 时）
+python tests/regression_reallib.py        # 全部页面 GET
+python tests/post_routes_check.py         # 全部写操作 POST，跑完自动还原数据
+
+# 4) 手动验证（会真的弹出系统对话框，需人点一下）
+python tests/manual_native_dialog.py
+python tests/manual_exe_browse.py         # 需先打包 exe
 ```
 
-> 说明：本项目的自动化测试直接驱动真实对话框与真实 HTTP 接口，
-> 属「冒烟测试」性质。欢迎补充基于 `app.test_client()` 的单元测试。
+> `post_routes_check.py` 会先备份 `data/library.json`，结束时无条件还原并校验 md5，
+> 可以放心在本机真实书库上运行。
+>
+> 改动了「打包 / 对话框 / 路径基准」相关代码时，请额外跑一遍手动验证脚本 ——
+> 自动化测试无法真正点选系统对话框。
 
 ## 提交规范
 

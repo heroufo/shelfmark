@@ -62,7 +62,7 @@ python app.py
 
 浏览器打开 **http://127.0.0.1:5000** 。首次运行会自动创建 `data/library.json`（空库）。
 
-Windows 用户也可以直接双击 **`启动图书馆.bat`**：后台静默启动、探测端口就绪后自动开浏览器。
+Windows 用户也可以直接双击 **`start.bat`**：后台静默启动、探测端口就绪后自动开浏览器。
 
 **可选配置**（环境变量）：
 
@@ -104,22 +104,62 @@ Windows 下也可以直接双击项目根目录的 **`build_exe.bat`**：生成�
 
 ```
 .
-├── app.py                    # Flask 主程序：路由、业务逻辑、JSON 存储
+├── app.py                    # 入口：创建 Flask 应用、注册路由、启动逻辑
+├── shelfmark/                # 内部模块（可独立单元测试，不依赖 Flask 的居多）
+│   ├── paths.py              #   运行模式与目录常量（打包版 / 源码版双基地）
+│   ├── utils.py              #   通用纯函数：数值 / 标签 / 文本 / 时间
+│   ├── storage.py            #   书库读写与原子保存、配置、站点目录解析
+│   ├── nationality.py        #   作者国籍（按文件名解析，离线）
+│   ├── metadata.py           #   在线元数据（豆瓣）抓取与解析
+│   ├── dialogs.py            #   系统原生文件 / 目录对话框、默认程序打开
+│   ├── books.py              #   排序、表单校验与构建、书架规则、标签统计
+│   ├── publishing.py         #   在线发布所需的数据差异计算
+│   └── views/                #   路由层，按领域分模块（端点名与原实现一致）
+│       ├── system.py         #     模板上下文注入
+│       ├── browse.py         #     主页 / 全部书籍 / 详情 / 作者 / 出版社 / 丛书
+│       ├── books.py          #     增删改、豆瓣补全、批量操作、打开与下载
+│       ├── shelves.py        #     书架
+│       ├── tools.py          #     统计、批量导入、国籍、路径修正、恢复导出、发布
+│       └── api.py            #     文件服务、对话框、元数据查询、封面上传
 ├── export_data.py            # 导出净化版数据到在线只读浏览站
 ├── file_dialog_helper.py     # 源码版：子进程弹系统文件对话框（tkinter）
 ├── shelfmark.spec            # PyInstaller 打包配置
 ├── make_icon.py              # Logo → exe 图标
 ├── make_autostart.py         # 生成 Windows 开机自启脚本（可选）
+├── start.bat / build_exe.bat # Windows 一键启动 / 一键重新打包
 ├── templates/                # Jinja2 模板（base.html 内含全部样式）
 ├── static/                   # 本地化 Bootstrap、Logo、默认占位图
 │   ├── css/  js/             # 离线可用，无 CDN 依赖
 │   ├── images/               # Logo 与默认封面（原创，代码绘制）
 │   └── covers/               # 用户封面【不入库】
-├── tools/                    # 开发辅助：画 Logo、改品牌名、开源体检
-├── tests/                    # 端到端冒烟测试
+├── tools/                    # 开发辅助：画 Logo、改品牌名、开源体检、import 检查
+├── tests/                    # 单元测试与端到端检查脚本（详见下节）
 ├── docs/                     # 设计文档
 └── data/                     # 【本地数据，不入库】书库 / 配置 / 日志
 ```
+
+## 🧪 开发与测试
+
+```bash
+pip install -r requirements-dev.txt
+
+python tools/check_imports.py --strict   # 静态检查：有没有用了却没 import 的名字
+python tools/audit_opensource.py         # 开源体检：个人路径 / 敏感信息 / 商标词
+python -m pytest                         # 单元测试（无需书库数据即可跑）
+```
+
+`tests/` 中的脚本分工：
+
+| 脚本 | 用途 | 需要真实书库 |
+| --- | --- | --- |
+| `test_units_*.py` | 纯函数与隔离数据存储的单元测试 | 否 |
+| `test_routes.py` | 路由表基线 + 校验模板里所有 `url_for` 都能解析 | 否 |
+| `regression_reallib.py` | 用真实书库跑全部页面（重构后的回归检查） | 是 |
+| `post_routes_check.py` | 真跑全部写操作路由，结束后从备份还原并校验 md5 | 是 |
+| `manual_*.py` | 需要真人点击的手动验证（会自动弹窗，pytest 不收集） | 视情况 |
+
+> 拆分 / 重构时建议的顺序：`check_imports` → `pytest` → `regression_reallib` → `post_routes_check`。
+> 推送后 GitHub Actions 会在 Ubuntu 与 Windows 上跑 Python 3.10/3.12/3.13 全矩阵。
 
 ## 🔧 数据与配置
 
