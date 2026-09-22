@@ -38,61 +38,48 @@ from flask import (Flask, Response, abort, flash, jsonify, redirect,
 import export_data
 
 # ---------------------------------------------------------------------------
-# 程序名称与版本（排错与发布用；版本格式 主.次.修订）
+# 项目内模块
+# 拆分后的内部模块（行为与原单文件实现完全一致）
 # ---------------------------------------------------------------------------
-APP_NAME = "Shelfmark"
-APP_VERSION = "1.1.0"
-
-# ---------------------------------------------------------------------------
-# 运行模式与路径（打包版 / 源码版 双基地）
-# ---------------------------------------------------------------------------
-# PyInstaller 打包（--onefile）后：
-#   - sys.frozen = True
-#   - RUNTIME_DIR = exe 所在目录 —— 用户可写数据区。书库 data/、封面 covers/、
-#     日志、发布配置都放这里（换电脑 = 拷贝 exe + data + covers 即迁移）
-#   - RES_DIR = exe 内部解压区 (_MEIPASS) —— 只读内置资源（模板 / 静态基础文件）
-# 源码运行（python app.py / 启动图书馆.bat）时两者相同，行为完全不变。
-IS_FROZEN = bool(getattr(sys, "frozen", False))
-if IS_FROZEN:
-    RUNTIME_DIR = os.path.dirname(os.path.abspath(sys.executable))
-    RES_DIR = getattr(sys, "_MEIPASS", RUNTIME_DIR)
-else:
-    RUNTIME_DIR = RES_DIR = os.path.dirname(os.path.abspath(__file__))
-
-BASE_DIR = RES_DIR          # 内置资源根（打包版=exe 内部；源码版=项目目录）
-DATA_DIR = os.path.join(RUNTIME_DIR, "data")
-LIBRARY_FILE = os.path.join(DATA_DIR, "library.json")
-CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
-
-# 在线只读浏览站（GitHub Pages）发布状态文件与默认站点目录。
-# 站点目录解析见 get_site_dir()：环境变量 SITE_DIR > data/config.json 的 site_dir > 默认约定。
-# 默认约定 = 与程序目录【同级】的 library-web 文件夹 —— 不写死任何个人路径；
-# 若站点仓库不在该位置，在 data/config.json 写入 {"site_dir": "你的路径"} 即可，无需改代码。
-DEFAULT_SITE_DIR = os.path.join(
-    os.path.dirname(os.path.normpath(RUNTIME_DIR)), "library-web")
-PUBLISH_STATE_FILE = os.path.join(DATA_DIR, "publish_state.json")
-
-# 批量导入支持的电子书格式（按扩展名筛选）
-ALLOWED_FORMATS = {".pdf", ".epub", ".mobi"}
-
-# 表单下拉选项
-STATUS_OPTIONS = ["未读", "在读", "已读", "搁置"]
-RATING_OPTIONS = [0, 1, 2, 3, 4, 5]
-FORMAT_OPTIONS = ["pdf", "epub", "mobi", "其他"]
-
-# 封面图片上传：封面图目录（运行时新增都写这里，打包版=exe 旁 covers/，源码版=static/covers/）
-if IS_FROZEN:
-    COVER_UPLOAD_DIR = os.path.join(RUNTIME_DIR, "covers")
-else:
-    COVER_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "covers")
-ALLOWED_COVER_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp",
-                     ".svg", ".bmp"}                             # 允许的图片格式
-MAX_COVER_SIZE = 5 * 1024 * 1024                                 # 单张封面最大 5MB
-
-# 分页 / 封面墙
-PAGE_SIZE_LIST = 108     # 表格视图每页本数
-PAGE_SIZE_CARDS = 108    # 封面墙每页本数
-SHELF_COUNT = 9          # 「最近添加 / 随机发现」各展示本数
+from shelfmark.paths import (
+    ALLOWED_COVER_EXT,
+    ALLOWED_FORMATS,
+    APP_NAME,
+    APP_VERSION,
+    BASE_DIR,
+    COVER_UPLOAD_DIR,
+    DATA_DIR,
+    FORMAT_OPTIONS,
+    IS_FROZEN,
+    LIBRARY_FILE,
+    MAX_COVER_SIZE,
+    PAGE_SIZE_CARDS,
+    PAGE_SIZE_LIST,
+    PUBLISH_STATE_FILE,
+    RATING_OPTIONS,
+    RUNTIME_DIR,
+    SHELF_COUNT,
+    STATUS_OPTIONS,
+)
+from shelfmark.storage import (
+    ensure_data_dir,
+    get_book,
+    get_site_dir,
+    load_data,
+    online_metadata_enabled,
+    save_data,
+)
+from shelfmark.utils import (
+    _strip_html,
+    _truncate_cn,
+    file_exists,
+    guess_format,
+    normalize_tags,
+    now_str,
+    safe_num,
+    status_class,
+    title_from_filename,
+)
 
 # 可排序字段 → 排序取值函数（key 函数）
 SORTABLE_FIELDS = {
@@ -191,40 +178,6 @@ def _http_get_text(url, timeout=12):
             if attempt < 2:
                 time.sleep(1.0 * (attempt + 1))
     raise last_err
-
-
-def _strip_html(raw):
-    """去掉 HTML 标签并规整空白与常见实体。"""
-    text = re.sub(r"<[^>]+>", "", raw)
-    for a, b in (("&nbsp;", " "), ("&amp;", "&"),
-                 ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
-                 ("&#39;", "'")):
-        text = text.replace(a, b)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _truncate_cn(text, limit=200):
-    """
-    把文本压到 limit 字以内：
-    - 优先按中文句末标点（。！？；）切句，逐句累加到接近 limit
-    - 单句超长则直接硬截断
-    - 被截断时末尾补省略号
-    """
-    text = text.strip()
-    if len(text) <= limit:
-        return text
-    parts = re.split(r"(?<=[。！？；])", text)
-    out = ""
-    for p in parts:
-        if len(out) + len(p) <= limit:
-            out += p
-        else:
-            break
-    if not out:                       # 单句超长，直接硬截断
-        out = text[:limit]
-    if out != text:
-        out = out.rstrip("，、；：,;: ") + "…"
-    return out
 
 
 # 豆瓣作者行国籍缩写 -> 全称（多字优先匹配）
@@ -509,230 +462,10 @@ app.secret_key = "ebook-manager-local-secret-key"
 # 数据持久化
 # ---------------------------------------------------------------------------
 
-def now_str():
-    """返回当前时间字符串，作为入库时间。"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def ensure_data_dir():
-    """确保 data/ 目录存在。"""
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-
-def load_config():
-    """读取 data/config.json（不存在 / 损坏返回空字典，不抛异常）。"""
-    try:
-        if os.path.isfile(CONFIG_FILE):
-            with open(CONFIG_FILE, encoding="utf-8") as f:
-                cfg = json.load(f)
-            if isinstance(cfg, dict):
-                return cfg
-    except Exception:
-        pass
-    return {}
-
-
-def save_config(cfg):
-    """写 data/config.json（原子写；失败静默，不影响主流程）。"""
-    try:
-        ensure_data_dir()
-        tmp_path = CONFIG_FILE + "." + uuid.uuid4().hex + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-        _atomic_replace(tmp_path, CONFIG_FILE)
-    except Exception:
-        pass
-
-
-def get_site_dir():
-    """
-    在线站点目录解析优先级：
-      环境变量 SITE_DIR > data/config.json 的 site_dir 字段 > 内置默认路径。
-    支持换电脑后把站点仓库路径写入 data/config.json 即可发布，无需改代码。
-    """
-    env = os.environ.get("SITE_DIR")
-    if env:
-        return env.strip().strip('"').strip("'")
-    site = (load_config().get("site_dir") or DEFAULT_SITE_DIR)
-    return site.strip().strip('"').strip("'")
-
-
-def online_metadata_enabled():
-    """
-    是否允许访问在线元数据源（豆瓣读书）。
-
-    - 默认开启（保持开箱即用）。
-    - 如需完全离线运行，在 data/config.json 写入 {"online_metadata": false}；
-      关闭后所有在线抓取（元数据补全 / 简介）直接跳过，程序其余功能不受影响。
-    """
-    try:
-        return bool(load_config().get("online_metadata", True))
-    except Exception:
-        return True
-
-
-def load_data():
-    """
-    加载书库数据。
-    - 文件不存在时创建默认空库并返回
-    - 文件损坏 / 格式错误时备份原文件并重建空库（保证程序不崩溃）
-    """
-    ensure_data_dir()
-    if not os.path.exists(LIBRARY_FILE):
-        empty = {"version": 1, "books": []}
-        save_data(empty)
-        return empty
-    try:
-        with open(LIBRARY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or "books" not in data:
-            raise ValueError("数据格式不正确")
-        return data
-    except Exception:
-        # 原文件损坏：备份为 .bak 后重建空库
-        try:
-            os.replace(LIBRARY_FILE, LIBRARY_FILE + ".bak")
-        except Exception:
-            pass
-        empty = {"version": 1, "books": []}
-        save_data(empty)
-        return empty
-
-
-def save_data(data):
-    """原子写回：先写临时文件再替换，避免中途写入导致 JSON 损坏。
-    Windows 上目标文件可能被杀毒 / 其他进程短暂锁定，故对 replace 加重试与兜底。
-    """
-    ensure_data_dir()
-    # 唯一临时文件名，避免多进程 / 多线程共用同一 .tmp 互相覆盖
-    tmp_path = "%s.%s.tmp" % (LIBRARY_FILE, uuid.uuid4().hex)
-    try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        _atomic_replace(tmp_path, LIBRARY_FILE)
-    except Exception:
-        # 清理自己产生的临时文件，避免残留堆积
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
-        raise
-
-
-def _atomic_replace(tmp_path, target):
-    """跨平台原子替换。Windows 下目标可能被锁，或运行环境（如沙箱）拦截
-    删除/替换操作，因此按序兜底：
-      1) os.replace 原子替换（重试 5 次，抗瞬时锁）
-      2) 复制覆盖 shutil.copy2（只写不删，兼容沙箱拦截删除的场景）
-      3) 备份后删除目标再 rename（对目标被独占锁更彻底）
-      4) 保留 .recover 便于手动恢复，并抛出原错误
-    """
-    last_err = None
-    for attempt in range(5):
-        try:
-            os.replace(tmp_path, target)
-            return
-        except (PermissionError, OSError) as e:
-            last_err = e
-            # 瞬时锁（杀毒扫描 / 其他进程短暂读）通常很快释放，短暂停顿后重试
-            time.sleep(0.3 * (attempt + 1))
-    # 兜底 A：直接复制覆盖（不删除目标文件，兼容沙箱拦截删除/替换的场景）
-    try:
-        if os.path.exists(target):
-            shutil.copy2(target, target + ".bak")
-        shutil.copy2(tmp_path, target)
-        return
-    except Exception as e:
-        last_err = e
-    # 兜底 B：先备份，再强制移除目标后 rename
-    try:
-        if os.path.exists(target):
-            shutil.copy2(target, target + ".bak")
-        if os.path.exists(target):
-            os.remove(target)
-        os.rename(tmp_path, target)
-        return
-    except Exception:
-        pass
-    # 彻底失败：把临时文件保留为 .recover 以便手动恢复，并抛出原错误
-    try:
-        if os.path.exists(tmp_path):
-            shutil.copy2(tmp_path, target + ".recover")
-    except Exception:
-        pass
-    raise last_err
-
-
-def get_book(book_id):
-    """按 book_id 查找书籍记录，找不到返回 None。"""
-    data = load_data()
-    for book in data["books"]:
-        if book["book_id"] == book_id:
-            return book
-    return None
-
 
 # ---------------------------------------------------------------------------
 # 工具函数
 # ---------------------------------------------------------------------------
-
-def safe_num(value, default=0):
-    """把字符串 / 数字安全转成数字，转换失败返回 default。"""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
-
-
-def normalize_tags(tags_str):
-    """把逗号 / 空格 / 顿号分隔的标签字符串转成去重后的列表。"""
-    parts = re.split(r"[,，、;\s]+", tags_str)
-    seen = []
-    for p in parts:
-        p = p.strip()
-        if p and p not in seen:
-            seen.append(p)
-    return seen
-
-
-def guess_format(path):
-    """根据文件路径后缀猜测格式，猜不到返回空字符串。"""
-    ext = os.path.splitext(path)[1].lstrip(".").lower()
-    if ext in FORMAT_OPTIONS:
-        return ext
-    return "其他" if ext else ""
-
-
-def title_from_filename(filename):
-    """
-    从文件名推导书名（按优先级逐级截取）：
-    1. 去掉扩展名
-    2. 取第一个引号（半角 " 或全角 “）之前的内容
-       （如：三体 “地球往事” _ 刘慈欣.epub → 「三体」）
-    3. 取「 - 」之前的内容（书名 - 作者 命名）
-       （如：丑闻 - [日]远藤周作 → 「丑闻」）
-    4. 去掉首尾空白与多余的下划线/连字符
-    5. 截取结果为空时回退为完整文件名
-    """
-    title = os.path.splitext(filename)[0]
-    for q in ('"', '\u201c'):          # 半角 " 或全角 “
-        if q in title:
-            title = title.split(q, 1)[0]
-            break
-    for sep in (' - ', '\uff0d', ' \u2014 '):   # 半角 -、全角 －、em dash
-        if sep in title:
-            title = title.split(sep, 1)[0]
-            break
-    title = title.strip().strip("_ -")
-    if not title:
-        title = os.path.splitext(filename)[0].strip()
-    return title
 
 
 def open_file_with_default_app(path):
@@ -1096,17 +829,6 @@ def cover_url(book):
             return url_for("static", filename=rel.replace(os.sep, "/"))
         return url_for("serve_file", filepath=path)
     return url_for("static", filename="images/default_cover.svg")
-
-
-def status_class(status):
-    """阅读状态 → Bootstrap 徽章样式类。"""
-    return {"未读": "secondary", "在读": "primary",
-            "已读": "success", "搁置": "warning"}.get(status, "secondary")
-
-
-def file_exists(path):
-    """判断书籍文件路径在磁盘上是否存在。"""
-    return bool(path) and os.path.exists(path)
 
 
 app.jinja_env.globals["cover_url"] = cover_url
