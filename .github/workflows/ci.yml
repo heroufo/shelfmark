@@ -11,6 +11,9 @@ jobs:
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    # 仅为「静态检查失败时把诊断输出推到 ci-diag 分支」而需要写权限
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -36,7 +39,33 @@ jobs:
         run: python -m compileall -q app.py export_data.py shelfmark
 
       - name: Static import check (catches names used but never imported)
-        run: python tools/check_imports.py --strict
+        id: impcheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          python tools/check_imports.py --strict --verbose > ci-diag.txt 2>&1
+          rc=$?
+          echo "exit_code=$rc" >> ci-diag.txt
+          cat ci-diag.txt
+          exit $rc
+
+      # 失败时把完整输出（含每个文件的字节指纹）推到一个独立分支，
+      # 便于在没有 API 权限 / 拿不到 job 日志时定位问题。
+      - name: Publish static-check diagnostics
+        if: steps.impcheck.outcome == 'failure' && runner.os == 'Windows' && matrix.python-version == '3.13'
+        shell: bash
+        run: |
+          git config user.name  "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add -f ci-diag.txt
+          git commit -m "ci(diag): static import check output (windows / py3.13)"
+          git push -f origin HEAD:ci-diag
+
+      - name: Fail if static import check failed
+        if: steps.impcheck.outcome == 'failure'
+        run: |
+          echo "static import check failed - see ci-diag.txt / the ci-diag branch"
+          exit 1
 
       - name: Open-source readiness audit
         run: python tools/audit_opensource.py

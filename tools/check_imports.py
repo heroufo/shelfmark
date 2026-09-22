@@ -13,15 +13,17 @@ Python 是动态语言：模块里引用了没 import 的名字，编译期不�
 用法：
     python tools/check_imports.py             # 检查全部（app.py + shelfmark/）
     python tools/check_imports.py --strict    # 有可疑名字时返回非零退出码
-    python tools/check_imports.py --verbose   # 额外打印每个文件的自由名字清单
+    python tools/check_imports.py --verbose   # 打印每个文件的指纹与自由名字清单
 
-在 GitHub Actions 上运行时，会把诊断信息以 ::error:: / ::notice:: 注解输出，
-便于在不登录、下载不了日志的情况下定位问题（注解可经公开 API 读取）。
+诊断：在 GitHub Actions 上运行时除正常输出外，还会打印每个文件的
+md5 / 字节数 / 行尾统计 / BOM 状态，便于跨平台比对（同样的输入必须得到
+同样的结论；若结论不同，先比对文件指纹）。
 """
 
 import argparse
 import ast
 import builtins
+import hashlib
 import os
 import sys
 
@@ -47,6 +49,21 @@ def annotate(level, text):
     payload = (str(text).replace("%", "%25")
                .replace("\r", "%0D").replace("\n", "%0A"))
     print("::%s::%s" % (level, payload))
+
+
+def file_fingerprint(path):
+    """返回 (md5前12位, 字节数, CRLF 数, 纯 LF 数, 是否带 BOM)。
+
+    跨平台排查用：若同一提交在两台机器上指纹不一致，说明文件内容不同，
+    而不是检查逻辑的问题。
+    """
+    with open(path, "rb") as f:
+        raw = f.read()
+    md5 = hashlib.md5(raw).hexdigest()[:12]
+    crlf = raw.count(b"\r\n")
+    lf = raw.count(b"\n") - crlf
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    return md5, len(raw), crlf, lf, bom
 
 
 def collect(path):
@@ -149,17 +166,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--verbose", action="store_true",
-                    help="打印每个文件的自由名字清单")
+                    help="打印每个文件的指纹与自由名字清单")
     args = ap.parse_args()
 
     files = scan_files()
+    detailed = args.verbose or ON_CI
 
     # 环境指纹：跨平台排查时最有用的一行
     fingerprint = ("python=%s platform=%s files=%d stdlib_names=%d root=%s"
                    % (sys.version.split()[0], sys.platform, len(files),
                       len(STDLIB_NAMES), ROOT))
     print("env: " + fingerprint)
-    annotate("notice", "check_imports env: " + fingerprint)
+
+    # 每个文件的字节指纹：确认两边看的确实是同一份内容
+    if detailed:
+        print("-- file fingerprints (md5/bytes/crlf/lf/bom) --")
+        for path in files:
+            md5, size, crlf, lf, bom = file_fingerprint(path)
+            print("   %-34s %s %6d crlf=%-4d lf=%-4d bom=%d"
+                  % (os.path.relpath(path, ROOT), md5, size, crlf, lf, int(bom)))
 
     # 全局符号表：包内所有模块的顶层符号 + 项目根模块
     known = set()
@@ -187,17 +212,20 @@ def main():
                             if isinstance(t, ast.Name):
                                 known.add(t.id)
 
+    if detailed:
+        print("-- symbol table: known=%d builtins=%d stdlib=%d --"
+              % (len(known), len(BUILTINS), len(STDLIB_NAMES)))
+
     problems = 0
     for path in files:
+        rel = os.path.relpath(path, ROOT)
         try:
             free, _ = collect(path)
         except SyntaxError as e:
-            rel = os.path.relpath(path, ROOT)
             print("语法错误 %s: %s" % (path, e))
             annotate("error", "syntax error in %s: %s" % (rel, e))
             return 1
         unresolved = sorted(free)
-        rel = os.path.relpath(path, ROOT)
         if unresolved:
             # 全局符号表（项目内）或标准库里有、但本文件没 import 的 → 一定漏了
             suspicious = [n for n in unresolved
@@ -219,14 +247,15 @@ def main():
                 annotate("error", "%s 漏 import: %s" % (rel, " ".join(reason)))
             if unknown:
                 print("   ? %s  未识别名字：%s" % (rel, ", ".join(unknown)))
-            if args.verbose or ON_CI:
-                annotate("notice", "%s free=%s" % (rel, ",".join(unresolved)))
+        if detailed:
+            print("   free %-30s %s" % (rel, ",".join(unresolved) or "(none)"))
 
     print("-" * 60)
     if problems:
         print("发现 %d 处漏 import，请修复。" % problems)
-        annotate("error", "check_imports: %d unresolved name(s) treated as missing imports"
-                 % problems)
+        annotate("error",
+                 "check_imports FAILED on %s: %d unresolved name(s)"
+                 % (sys.platform, problems))
         return 1 if args.strict else 0
     print("import 完整性检查通过 ✓")
     return 0
