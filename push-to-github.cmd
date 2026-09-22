@@ -15,7 +15,7 @@ echo          https://github.com/new
 echo            Owner        : heroufo
 echo            Name         : shelfmark
 echo            Visibility   : Public
-echo            README / .gitignore / License  ->  check NONE of them
+echo            README / .gitignore / License  -^>  check NONE of them
 echo.
 echo          (if you check any of them the push below will be rejected)
 echo.
@@ -41,7 +41,7 @@ echo STEP 2  connect the remote
 echo.
 %GIT% remote get-url origin >nul 2>nul
 if errorlevel 1 (
-  echo   adding origin  ->  %REPO%
+  echo   adding origin  -^>  %REPO%
   %GIT% remote add origin %REPO%
 ) else (
   echo   origin already exists, updating URL
@@ -82,7 +82,7 @@ echo   CI (Actions) starts automatically on the first push.
 echo ============================================================
 echo.
 echo   Next, optional:
-echo     - Releases page  ->  draft a release from tag %TAG%
+echo     - Releases page  -^>  draft a release from tag %TAG%
 echo       attach  dist_exe\Shelfmark.exe   (the exe alone is safe;
 echo       never upload data\ or covers\ - that is your private library)
 echo.
