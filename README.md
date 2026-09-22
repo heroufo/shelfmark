@@ -2,7 +2,7 @@
 
 本地运行、零依赖服务的个人电子书管理器。用 Flask + 单个 JSON 文件管理你的藏书元数据，
 自带封面墙、丛书分卷、书架归集、批量导入与在线元数据补全；也能打包成一个免安装的
-`exe`，拷到任何 Windows 电脑双击即用。
+`exe`，拷到任何 Windows 电脑双击即用 —— 或直接从 GitHub Releases 下载成品包。
 
 > 名字取自图书馆学的 **shelfmark（索书号）** —— 给每本书一个位置，让它能被找到。
 
@@ -48,7 +48,28 @@
 - 一键发布：把「净化版」数据（剔除本机路径）导出到静态站点目录并
   `git push`，得到一个只读在线浏览站（如 GitHub Pages）
 
-## 🚀 快速开始
+## 📦 下载即用（Windows 10/11 x64）
+
+不想折腾 Python 环境？直接到 **[Releases](https://github.com/heroufo/shelfmark/releases/latest)**
+下载 `Shelfmark-vX.Y.Z-win64.zip`：
+
+1. 解压到任意普通目录（如 `D:\Shelfmark`、桌面、文档）
+2. 双击 `Shelfmark.exe` —— 几秒后浏览器会自动打开 `http://127.0.0.1:5000`
+
+**免安装**：内置 Python 运行时，目标电脑无需安装 Python、无需联网、无需管理员权限。
+首次运行会在同一目录自动创建 `data\`（书库）与 `covers\`（封面）——
+这两处是你的个人数据，不在下载包里，备份时整目录拷走即可。
+
+> 若 Windows Defender 提示「已保护你的电脑」，选「更多信息 → 仍要运行」。
+> 这是未做数字签名的单文件程序的常见误报；介意可对照 Release 页面公布的 SHA256。
+
+每个 Release 的 zip 由 CI 在推送 `v*` 标签时自动构建，校验下载完整性：
+
+```powershell
+Get-FileHash .\Shelfmark-vX.Y.Z-win64.zip -Algorithm SHA256
+```
+
+## 🚀 从源码运行
 
 ```bash
 git clone https://github.com/heroufo/shelfmark.git
@@ -93,6 +114,21 @@ dist_exe/
 
 Windows 下也可以直接双击项目根目录的 **`build_exe.bat`**：生成图标 → 打包 →
 把最新书库与封面同步进 `dist_exe/`，一条龙完成。
+
+**组装发布用的 zip**（自动剔除个人数据，可直接挂到 GitHub Release）：
+
+```bash
+python tools/make_release_package.py
+# 产物：dist_release/Shelfmark-v1.1.0-win64.zip
+```
+
+该脚本只从**白名单**复制文件（exe + 使用说明 + LICENSE + 第三方声明 + 空的
+`data/`、`covers/`），打包前还会反向扫描一遍 —— 一旦发现 `library.json`、封面图片
+或日志混入就立即中止。这样即便 `dist_exe/` 里同时躺着你的私人书库，也不会被
+误传成公开下载包。
+
+推送 `v*` 标签时，CI 会自动执行上述流程并把 zip 发布为 Release
+（见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)）。
 
 > **运行机制**：打包版区分两个路径基准 —— 可写数据在 **exe 同级目录**
 > （`data/`、`covers/`、`app.log`），只读资源在 exe 内部（模板、样式、内置占位图）。

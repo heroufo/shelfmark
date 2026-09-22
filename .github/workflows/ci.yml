@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]          # 推送 v1.1.0 之类的标签 -> 自动出软件包并发 Release
   pull_request:
   workflow_dispatch:
 
@@ -63,3 +64,66 @@ jobs:
       - name: Verify artefact exists
         run: |
           python -c "import os; p='dist_exe/Shelfmark.exe'; assert os.path.isfile(p), 'exe not built'; print('built:', os.path.getsize(p), 'bytes')"
+
+  # ---------------------------------------------------------------------------
+  # 发版作业：仅当推送 v* 标签时执行。
+  # 重新干净打包 -> 组装「不含个人数据」的 zip -> 创建 Release 并附上 zip。
+  # 注意：创建 Release 需要写权限。若仓库是 2023-02 之后新建的，默认 token 为
+  # 只读，需到 Settings -> Actions -> General -> Workflow permissions 选
+  # "Read and write permissions"，这里的 permissions 声明才会生效。
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish Windows release package
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, package-check]     # 测试全绿才发版
+    runs-on: windows-latest
+    permissions:
+      contents: write               # 创建 Release 必须
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Generate exe icon
+        run: python make_icon.py
+
+      - name: Build single-file exe
+        run: python -m PyInstaller --noconfirm --clean --distpath dist_exe shelfmark.spec
+
+      - name: Assemble download-and-run package
+        run: python tools/make_release_package.py
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist_release/*.zip
+          generate_release_notes: true
+          body: |
+            ## 下载即可使用（Windows 10/11 x64）
+
+            1. 下载下方 **`Shelfmark-vX.Y.Z-win64.zip`**
+            2. 解压到任意普通目录（如 `D:\Shelfmark`、桌面、文档）
+            3. 双击 `Shelfmark.exe` —— 几秒后浏览器会自动打开 `http://127.0.0.1:5000`
+
+            **免安装**：内置 Python 运行时，目标电脑无需安装 Python、无需联网、
+            无需管理员权限。首次运行会在同一目录自动创建 `data\`（书库）与
+            `covers\`（封面）—— 这两处是你的个人数据，不在下载包里，也不会被上传。
+
+            > 若 Windows Defender 提示「已保护你的电脑」，选「更多信息 → 仍要运行」。
+            > 这是未做数字签名的单文件程序的常见误报。详见包内 `使用说明.txt`。
+
+            校验下载完整性（PowerShell）：
+
+            ```powershell
+            Get-FileHash .\Shelfmark-vX.Y.Z-win64.zip -Algorithm SHA256
+            ```
+
+            源码与问题反馈：https://github.com/heroufo/shelfmark

@@ -23,6 +23,7 @@ shelfmark.spec            PyInstaller 打包配置（单文件 exe）
 start.bat / build_exe.bat Windows 一键启动 / 一键重新打包
 rename-folder.cmd        把项目文件夹改名并保留旧名目录联接（迁移用，可选）
 push-to-github.cmd       首次发布到 GitHub（网页建好空仓库后双击）
+packaging/               发行包内给终端用户的文档（使用说明.txt）
 templates/ static/        Jinja2 模板与本地化静态资源
 tools/ tests/ docs/       开发辅助、测试、设计文档
 data/                     【本地数据，不入库】书库 JSON、配置、日志
@@ -61,6 +62,7 @@ python app.py                          # → http://127.0.0.1:5000
 pip install -r requirements-dev.txt
 python make_icon.py
 python -m PyInstaller --noconfirm --clean --distpath dist_exe shelfmark.spec
+python tools/make_release_package.py      # 可选：组装发布用 zip（剔除个人数据）
 ```
 
 ## 数据与本机路径
