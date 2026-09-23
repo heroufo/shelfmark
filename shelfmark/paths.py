@@ -15,7 +15,7 @@ import sys
 # 程序名称与版本（排错与发布用；版本格式 主.次.修订）
 # ---------------------------------------------------------------------------
 APP_NAME = "Shelfmark"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 # ---------------------------------------------------------------------------
 # 运行模式与路径（打包版 / 源码版 双基地）
@@ -40,11 +40,45 @@ LIBRARY_FILE = os.path.join(DATA_DIR, "library.json")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 
 # 在线只读浏览站（GitHub Pages）发布状态文件与默认站点目录。
-# 站点目录解析见 get_site_dir()：环境变量 SITE_DIR > data/config.json 的 site_dir > 默认约定。
-# 默认约定 = 与程序目录【同级】的 library-web 文件夹 —— 不写死任何个人路径；
-# 若站点仓库不在该位置，在 data/config.json 写入 {"site_dir": "你的路径"} 即可，无需改代码。
-DEFAULT_SITE_DIR = os.path.join(
-    os.path.dirname(os.path.normpath(RUNTIME_DIR)), "library-web")
+# 站点目录解析见 get_site_dir()：环境变量 SITE_DIR > data/config.json 的 site_dir > 自动探测。
+# 自动探测 = 从程序目录起逐级向上找【同级】的 library-web：源码版第一层即命中；
+# 打包版（exe 可能放在 dist_exe/ 之类子目录里）会自动再往上找一层。
+# 这样不写死任何个人路径，换个目录 / 换台电脑也不用改代码；
+# 若站点仓库确实在别处，在 data/config.json 写 {"site_dir": "你的路径"}，
+# 或在界面侧栏「在线发布」里点「设置站点目录」直接指定即可。
+SITE_DIR_NAME = "library-web"
+
+
+def _looks_like_site(path):
+    """判断目录是否像一个站点仓库（.git / index.html / data 任一存在即可）。"""
+    if not os.path.isdir(path):
+        return False
+    return any(os.path.exists(os.path.join(path, marker))
+               for marker in (".git", "index.html", "data"))
+
+
+def site_dir_candidates():
+    """自动探测依次尝试过的候选路径（错误提示里展示，方便对照排查）。"""
+    out = []
+    here = os.path.normpath(RUNTIME_DIR)
+    for _ in range(4):
+        out.append(os.path.join(os.path.dirname(here), SITE_DIR_NAME))
+        parent = os.path.dirname(here)
+        if parent == here:              # 已到盘符根 / 根目录，不再向上
+            break
+        here = parent
+    return out
+
+
+def _detect_site_dir():
+    """自动探测站点目录：取第一个「像站点仓库」的候选；都没有则退回约定路径。"""
+    for cand in site_dir_candidates():
+        if _looks_like_site(cand):
+            return os.path.normpath(cand)
+    return site_dir_candidates()[0]
+
+
+DEFAULT_SITE_DIR = _detect_site_dir()
 PUBLISH_STATE_FILE = os.path.join(DATA_DIR, "publish_state.json")
 
 # 批量导入支持的电子书格式（按扩展名筛选）

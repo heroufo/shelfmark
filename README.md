@@ -122,7 +122,7 @@ Windows 下也可以直接双击项目根目录的 **`build_exe.bat`**：生成�
 
 ```bash
 python tools/make_release_package.py
-# 产物：dist_release/Shelfmark-v1.1.0-win64.zip
+# 产物：dist_release/Shelfmark-v1.1.1-win64.zip
 ```
 
 该脚本只从**白名单**复制文件（exe + 使用说明 + LICENSE + 第三方声明 + 空的

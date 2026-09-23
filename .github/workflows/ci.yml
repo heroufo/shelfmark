@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main, master]
-    tags: ["v*"]          # 推送 v1.1.0 之类的标签 -> 自动出软件包并发 Release
+    tags: ["v*"]          # 推送 v1.1.1 之类的标签 -> 自动出软件包并发 Release
   pull_request:
   workflow_dispatch:
 

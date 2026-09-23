@@ -16,6 +16,7 @@ from shelfmark.paths import (
     DATA_DIR,
     DEFAULT_SITE_DIR,
     LIBRARY_FILE,
+    site_dir_candidates,
 )
 
 
@@ -52,14 +53,44 @@ def save_config(cfg):
 def get_site_dir():
     """
     在线站点目录解析优先级：
-      环境变量 SITE_DIR > data/config.json 的 site_dir 字段 > 内置默认路径。
+      环境变量 SITE_DIR > data/config.json 的 site_dir 字段 > 自动探测的默认路径。
+    自动探测见 paths.py：从程序目录逐级向上找同级的 library-web，源码版 / 打包版都能命中，
     支持换电脑后把站点仓库路径写入 data/config.json 即可发布，无需改代码。
     """
     env = os.environ.get("SITE_DIR")
     if env:
-        return env.strip().strip('"').strip("'")
+        return _clean_path(env)
     site = (load_config().get("site_dir") or DEFAULT_SITE_DIR)
-    return site.strip().strip('"').strip("'")
+    return _clean_path(site)
+
+
+def _clean_path(p):
+    """去掉用户粘贴路径时常见的首尾空白与成对引号。"""
+    return (p or "").strip().strip('"').strip("'")
+
+
+def set_site_dir(path):
+    """
+    把在线站点目录写进 data/config.json（site_dir 字段），供界面上一键指定。
+    只接受确实存在的目录；成功返回清洗后的路径，失败返回 None（不改动配置）。
+    """
+    p = _clean_path(path)
+    if not p or not os.path.isdir(p):
+        return None
+    cfg = load_config()
+    cfg["site_dir"] = p
+    save_config(cfg)
+    return p
+
+
+def site_dir_info():
+    """供界面展示：当前解析到的站点目录，以及它是否真实存在。"""
+    site = get_site_dir()
+    return {
+        "site": site,
+        "exists": os.path.isdir(site),
+        "tried": site_dir_candidates(),
+    }
 
 
 def online_metadata_enabled():

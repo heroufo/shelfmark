@@ -105,9 +105,28 @@
     }
     .bl-publish-btn:hover { background: #a5b4fc; border-color: #a5b4fc; }
     .bl-publish-btn:disabled { opacity: .6; cursor: wait; }
-    .bl-publish-msg { font-size: 11px; margin-top: 6px; line-height: 1.6; word-break: break-all; }
+    .bl-publish-msg { font-size: 11px; margin-top: 6px; line-height: 1.6; word-break: break-all; white-space: pre-line; }
     .bl-publish-msg.ok { color: var(--green); }
     .bl-publish-msg.err { color: #f87171; }
+    /* 站点目录：一行状态（可点开设置），找不到时红点提示 */
+    .bl-site-toggle {
+      display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px;
+      padding: 5px 8px; border-radius: 8px; cursor: pointer; text-align: left;
+      background: transparent; border: 1px solid var(--bl-border); color: var(--bl-muted);
+      font-size: 11px;
+    }
+    .bl-site-toggle:hover { border-color: var(--bl-accent); color: var(--bl-text); }
+    .bl-site-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+    .bl-site-dot.err { background: #f87171; }
+    .bl-site-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bl-site-setup { margin-top: 8px; padding: 9px 10px; border: 1px solid var(--bl-border); border-radius: 8px; background: rgba(255,255,255,.03); }
+    .bl-site-hint { font-size: 11px; color: var(--bl-muted); line-height: 1.6; margin-bottom: 6px; }
+    .bl-site-setup input { font-size: 11px; padding: 4px 8px; height: auto; }
+    .bl-site-actions { display: flex; gap: 6px; margin-top: 7px; }
+    .bl-site-actions .bl-publish-btn { margin-top: 0; flex: 1 1 0; font-size: 11.5px; padding: 5px 0; }
+    .bl-site-msg { font-size: 11px; margin-top: 6px; line-height: 1.6; color: var(--bl-muted); word-break: break-all; }
+    .bl-site-msg.ok { color: var(--green); }
+    .bl-site-msg.err { color: #f87171; }
     .bl-nav-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
     /* 侧栏中部导航区：超高时内部滚动，底部（在线发布 + footer）保持固定可见 */
@@ -418,9 +437,27 @@
       {% endif %}
       <button class="bl-publish-btn" id="btnPublish" type="button">🚀 发布到在线站</button>
       <div class="bl-publish-msg" id="publishMsg"></div>
+      <button class="bl-site-toggle" id="btnSiteToggle" type="button"
+              title="{{ site_info.site if site_info else '' }}">
+        <span class="bl-site-dot {% if not (site_info and site_info.exists) %}err{% endif %}"></span>
+        <span class="bl-site-path">{{ site_info.site if site_info else '未设置站点目录' }}</span>
+        <span>⚙</span>
+      </button>
+      <div class="bl-site-setup" id="pubSiteSetup" hidden>
+        <div class="bl-site-hint">选择站点仓库所在的文件夹（含 index.html / data 的那个目录）
+          {%- if site_info and not site_info.exists and site_info.tried %}<br>已自动尝试：
+          {%- for p in site_info.tried %}<br>· {{ p }}{% endfor %}{% endif %}</div>
+        <input type="text" class="form-control" id="pubSiteInput"
+               value="{{ site_info.site if site_info else '' }}" placeholder="如 D:\library-web">
+        <div class="bl-site-actions">
+          <button class="bl-publish-btn" id="btnPickSite" type="button">📂 浏览…</button>
+          <button class="bl-publish-btn" id="btnSaveSite" type="button">保存</button>
+        </div>
+        <div class="bl-site-msg" id="pubSiteMsg"></div>
+      </div>
     </div>
 
-    <div class="bl-sidebar-foot">v1.1 · 本地书库<br>数据保存在 data/library.json</div>
+    <div class="bl-sidebar-foot">v{{ app_version }} · 本地书库<br>数据保存在 data/library.json</div>
   </aside>
 
   <!-- ============ 主区域 ============ -->
@@ -485,6 +522,7 @@
           .then(function (d) {
             msg.textContent = d.message || (d.ok ? '发布成功' : '发布失败');
             msg.className = 'bl-publish-msg ' + (d.ok ? 'ok' : 'err');
+            if (d.need_site) { openSiteSetup(d.site); }
             if (d.ok) {
               var t = document.getElementById('pubMetaTime');
               var c = document.getElementById('pubMetaCount');
@@ -501,6 +539,84 @@
             btn.textContent = '🚀 发布到在线站';
           });
       });
+    }
+
+    // 「在线发布」：站点目录的状态显示与一键设置（选目录 / 保存 / 记住）
+    var siteSetup = document.getElementById('pubSiteSetup');
+    var siteInput = document.getElementById('pubSiteInput');
+    var siteMsg = document.getElementById('pubSiteMsg');
+    var siteToggle = document.getElementById('btnSiteToggle');
+
+    function openSiteSetup(prefill) {
+      if (!siteSetup) { return; }
+      if (prefill) { siteInput.value = prefill; }
+      siteSetup.hidden = false;
+      siteInput.focus();
+    }
+
+    function saveSitePath(path) {
+      if (!siteMsg) { return; }
+      siteMsg.className = 'bl-site-msg';
+      siteMsg.textContent = '正在保存…';
+      fetch('{{ url_for("publish_site_dir") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: path })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          siteMsg.textContent = d.message || (d.ok ? '已保存' : '保存失败');
+          siteMsg.className = 'bl-site-msg ' + (d.ok ? 'ok' : 'err');
+          if (d.ok) {
+            // 就地更新状态行，避免整页刷新造成跳动
+            var dot = siteToggle && siteToggle.querySelector('.bl-site-dot');
+            var txt = siteToggle && siteToggle.querySelector('.bl-site-path');
+            if (dot) { dot.classList.remove('err'); }
+            if (txt) { txt.textContent = d.site; }
+            if (siteToggle) { siteToggle.title = d.site; }
+          }
+        })
+        .catch(function () {
+          siteMsg.textContent = '请求失败（服务未启动或超时）';
+          siteMsg.className = 'bl-site-msg err';
+        });
+    }
+
+    if (siteToggle) {
+      siteToggle.addEventListener('click', function () {
+        if (siteSetup.hidden) { openSiteSetup(); } else { siteSetup.hidden = true; }
+      });
+    }
+    var btnPickSite = document.getElementById('btnPickSite');
+    if (btnPickSite) {
+      btnPickSite.addEventListener('click', function () {
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = '选择中…';
+        fetch('{{ url_for("api_browse_folder") }}')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.ok && d.path) { siteInput.value = d.path; saveSitePath(d.path); }
+            else if (siteMsg) {
+              siteMsg.textContent = d.message || '未选择目录';
+              siteMsg.className = 'bl-site-msg err';
+            }
+          })
+          .catch(function () {
+            if (siteMsg) {
+              siteMsg.textContent = '打开目录选择器失败';
+              siteMsg.className = 'bl-site-msg err';
+            }
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = '📂 浏览…';
+          });
+      });
+    }
+    var btnSaveSite = document.getElementById('btnSaveSite');
+    if (btnSaveSite) {
+      btnSaveSite.addEventListener('click', function () { saveSitePath(siteInput.value); });
     }
 
     // 侧边栏可折叠分组（书架 / 管理）：点标题箭头展开/收起，状态记忆在 localStorage

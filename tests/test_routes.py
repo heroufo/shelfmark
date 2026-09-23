@@ -54,6 +54,7 @@ EXPECTED_ROUTES = [
     ("/open/<book_id>", "open_book", ("GET",)),
     ("/paths/run", "paths_repair", ("POST",)),
     ("/publish", "publish_online", ("POST",)),
+    ("/publish/site", "publish_site_dir", ("GET", "POST")),
     ("/publisher/<path:publisher>", "publisher_view", ("GET",)),
     ("/restore", "restore_json", ("POST",)),
     ("/series", "series_view", ("GET",)),
@@ -99,7 +100,7 @@ class TestRouteTable:
         "index", "all_books", "book_detail", "book_add", "book_edit",
         "book_delete", "shelves_view", "shelf_detail", "stats_view",
         "import_books", "import_commit", "export_json", "restore_json",
-        "publish_online", "series_view", "author_view", "publisher_view",
+        "publish_online", "publish_site_dir", "series_view", "author_view", "publisher_view",
         "serve_file", "api_browse_file", "api_browse_folder",
         "api_book_meta", "api_upload_cover", "download_book",
         "refresh_blurb", "book_douban_update", "books_bulk_tags",
@@ -169,3 +170,43 @@ class TestViewModulesRegistered:
         mod.register(FakeApp())
         assert len(captured) >= min_routes, \
             "%s 只注册了 %d 项" % (module_name, len(captured))
+
+
+class TestPublishSiteRoute:
+    """站点目录查询 / 设置接口（发布失败时可一键指定路径）。"""
+
+    def test_get_reports_resolution(self, app_module):
+        r = app_module.app.test_client().get("/publish/site")
+        j = r.get_json()
+        assert r.status_code == 200 and j["ok"] is True
+        assert isinstance(j["site"], str) and j["site"]
+        assert isinstance(j["exists"], bool)
+        assert isinstance(j["tried"], list) and j["tried"]
+
+    def test_post_rejects_bad_path(self, app_module):
+        j = app_module.app.test_client().post(
+            "/publish/site", json={"path": ""}).get_json()
+        assert j["ok"] is False and j["message"]
+
+    def test_post_saves_path(self, app_module, monkeypatch):
+        import shelfmark.views.tools as T
+        seen = {}
+
+        def fake_set(path):
+            seen["path"] = path
+            return path
+
+        monkeypatch.setattr(T, "set_site_dir", fake_set)
+        j = app_module.app.test_client().post(
+            "/publish/site", json={"path": r"D:\library-web"}).get_json()
+        assert j["ok"] is True
+        assert seen["path"] == r"D:\library-web"
+        assert j["site"] == r"D:\library-web"
+
+    def test_post_accepts_form_field(self, app_module, monkeypatch):
+        """没有 fetch/JSON 的环境（或旧页面）用表单提交也能生效。"""
+        import shelfmark.views.tools as T
+        monkeypatch.setattr(T, "set_site_dir", lambda p: p or None)
+        j = app_module.app.test_client().post(
+            "/publish/site", data={"path": r"D:\site"}).get_json()
+        assert j["ok"] is True

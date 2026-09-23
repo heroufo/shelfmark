@@ -4,7 +4,7 @@
 from shelfmark.books import _ensure_shelves
 from shelfmark.paths import APP_NAME, APP_VERSION, STATUS_OPTIONS
 from shelfmark.publishing import _read_publish_state
-from shelfmark.storage import load_data
+from shelfmark.storage import load_data, site_dir_info
 
 
 def inject_library_stats():
@@ -35,8 +35,11 @@ def inject_nav_shelves():
 
 
 def inject_publish_state():
-    """向所有模板注入上次发布状态（供侧边栏展示）。"""
-    return {"publish_state": _read_publish_state()}
+    """向所有模板注入上次发布状态与在线站点目录信息（供侧边栏展示）。"""
+    return {
+        "publish_state": _read_publish_state(),
+        "site_info": site_dir_info(),
+    }
 
 
 def register(app):

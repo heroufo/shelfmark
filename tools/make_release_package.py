@@ -9,8 +9,8 @@
 
 产物::
 
-    dist_release/Shelfmark-v1.1.0-win64.zip
-        Shelfmark-v1.1.0-win64/
+    dist_release/Shelfmark-v1.1.1-win64.zip
+        Shelfmark-v1.1.1-win64/
             Shelfmark.exe            主程序（双击运行）
             使用说明.txt              终端用户文档
             LICENSE                   MIT 许可证（分发必须附带）

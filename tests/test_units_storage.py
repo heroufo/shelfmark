@@ -173,3 +173,107 @@ class TestAtomicReplace:
         dst = tmp_path / "b.txt"
         _atomic_replace(str(src), str(dst))
         assert dst.read_text(encoding="utf-8") == "x"
+
+
+class TestSiteDirDetect:
+    """站点目录自动探测：源码版 / 打包版（exe 在子目录）都应找到同一个仓库。
+
+    背景：打包版把 exe 放在 dist_exe/ 之类子目录时，原先「只看程序目录同级」
+    会找不到站点仓库，报「在线站点目录不存在」。现在改为逐级向上查找。
+    """
+
+    def _norm(self, p):
+        return os.path.normcase(os.path.normpath(str(p)))
+
+    def test_candidates_start_at_sibling(self, tmp_path, monkeypatch):
+        import shelfmark.paths as P
+        runtime = tmp_path / "proj" / "dist_exe"
+        runtime.mkdir(parents=True)
+        monkeypatch.setattr(P, "RUNTIME_DIR", str(runtime))
+        cands = P.site_dir_candidates()
+        # 第一个候选仍是「与程序目录同级」（保持历史行为可预期）
+        assert self._norm(cands[0]) == self._norm(tmp_path / "proj" / "library-web")
+        # 但会继续向上，覆盖到项目目录的同级
+        assert self._norm(tmp_path / "library-web") in [self._norm(c) for c in cands]
+
+    def test_detect_finds_site_one_level_up(self, tmp_path, monkeypatch):
+        """站点仓库在项目目录同级，程序跑在 项目/dist_exe 里 —— 应能自动命中。"""
+        import shelfmark.paths as P
+        site = tmp_path / "library-web"
+        (site / "data").mkdir(parents=True)
+        runtime = tmp_path / "proj" / "dist_exe"
+        runtime.mkdir(parents=True)
+        monkeypatch.setattr(P, "RUNTIME_DIR", str(runtime))
+        assert self._norm(P._detect_site_dir()) == self._norm(site)
+
+    def test_detect_accepts_git_or_index_marker(self, tmp_path, monkeypatch):
+        import shelfmark.paths as P
+        site = tmp_path / "library-web"
+        site.mkdir()
+        (site / "index.html").write_text("<html></html>", encoding="utf-8")
+        runtime = tmp_path / "proj"
+        runtime.mkdir()
+        monkeypatch.setattr(P, "RUNTIME_DIR", str(runtime))
+        assert self._norm(P._detect_site_dir()) == self._norm(site)
+
+    def test_plain_empty_dir_is_not_a_site(self, tmp_path, monkeypatch):
+        """同名但没有任何站点特征的目录不算命中，退回约定路径（不猜）。"""
+        import shelfmark.paths as P
+        (tmp_path / "library-web").mkdir()             # 空壳目录
+        runtime = tmp_path / "proj"
+        runtime.mkdir()
+        monkeypatch.setattr(P, "RUNTIME_DIR", str(runtime))
+        assert self._norm(P._detect_site_dir()) == \
+            self._norm(P.site_dir_candidates()[0])
+
+
+class TestSetSiteDir:
+    """界面上「设置站点目录」写回配置的行为。"""
+
+    def test_rejects_missing_dir(self, temp_storage):
+        S = temp_storage
+        assert S.set_site_dir(r"D:\definitely\not\here") is None
+        assert "site_dir" not in S.load_config()
+
+    def test_rejects_empty(self, temp_storage):
+        S = temp_storage
+        assert S.set_site_dir("   ") is None
+        assert S.set_site_dir(None) is None
+
+    def test_saves_and_strips_quotes(self, temp_storage, tmp_path):
+        S = temp_storage
+        site = tmp_path / "site"
+        site.mkdir()
+        saved = S.set_site_dir('"%s"' % site)
+        assert saved == str(site)
+        assert S.load_config()["site_dir"] == str(site)
+
+    def test_get_site_dir_uses_saved_path(self, temp_storage, monkeypatch, tmp_path):
+        S = temp_storage
+        monkeypatch.delenv("SITE_DIR", raising=False)
+        site = tmp_path / "site"
+        site.mkdir()
+        S.set_site_dir(str(site))
+        assert S.get_site_dir() == str(site)
+
+    def test_info_reports_existence(self, temp_storage, monkeypatch, tmp_path):
+        S = temp_storage
+        monkeypatch.delenv("SITE_DIR", raising=False)
+        site = tmp_path / "site"
+        site.mkdir()
+        S.set_site_dir(str(site))
+        info = S.site_dir_info()
+        assert info["site"] == str(site)
+        assert info["exists"] is True
+        assert isinstance(info["tried"], list) and info["tried"]
+
+    def test_info_reports_missing(self, temp_storage, monkeypatch, tmp_path):
+        S = temp_storage
+        monkeypatch.delenv("SITE_DIR", raising=False)
+        absent = str(tmp_path / "not-here")
+        # 把「自动探测的兜底路径」也指到不存在的目录，模拟真机上找不到站点仓库
+        monkeypatch.setattr(S, "DEFAULT_SITE_DIR", absent)
+        assert S.set_site_dir(absent) is None           # 不存在 → 不写入配置
+        info = S.site_dir_info()
+        assert info["site"] == absent
+        assert info["exists"] is False

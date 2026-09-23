@@ -26,10 +26,18 @@ from shelfmark.paths import (
     COVER_UPLOAD_DIR,
     LIBRARY_FILE,
     RATING_OPTIONS,
+    SITE_DIR_NAME,
     STATUS_OPTIONS,
+    site_dir_candidates,
 )
 from shelfmark.publishing import _diff_books, _save_publish_state
-from shelfmark.storage import get_site_dir, load_data, save_data
+from shelfmark.storage import (
+    get_site_dir,
+    load_data,
+    save_data,
+    set_site_dir,
+    site_dir_info,
+)
 from shelfmark.utils import now_str, safe_num, title_from_filename
 
 
@@ -354,14 +362,15 @@ def publish_online():
     3) git add/commit/push（首次推送会弹 GitHub 登录窗口；需要本机装有 git）
     4) 记录发布状态（时间 + 数量）到 data/publish_state.json
     设置环境变量 PUBLISH_DRY_RUN=1 可跳过 git 步骤（测试用）。
-    站点目录解析：环境变量 SITE_DIR > data/config.json 的 site_dir > 默认路径。
+    站点目录解析：环境变量 SITE_DIR > data/config.json 的 site_dir > 自动探测的默认路径。
     """
     site = get_site_dir()
     if not os.path.isdir(site):
-        return jsonify({"ok": False,
-                        "message": f"在线站点目录不存在：{site}。"
-                                   "若换到新电脑使用，请先克隆站点仓库，并把路径写入 "
-                                   "data/config.json 的 site_dir 字段（或设置环境变量 SITE_DIR）。"})
+        return jsonify({"ok": False, "need_site": True, "site": site,
+                        "tried": site_dir_candidates(),
+                        "message": f"未找到在线站点目录：{site}\n"
+                                   f"已自动向上查找同级的 {SITE_DIR_NAME}/（见下方清单）。\n"
+                                   "点下方「⚙」选择站点仓库文件夹即可，选好会自动记住。"})
     try:
         # 1) 读取上次发布到站点的数据（用于 diff）
         old_books = []
@@ -409,6 +418,26 @@ def publish_online():
         return jsonify({"ok": False, "message": f"发布异常：{e}"})
 
 
+def publish_site_dir():
+    """
+    在线站点目录的查询与设置。
+    - GET ：返回当前解析到的目录、是否存在、以及自动探测试过的候选路径。
+    - POST：把前端传来的路径写入 data/config.json 的 site_dir 字段（只接受已存在的目录），
+            用于站点仓库不在默认位置（换电脑 / 站点放在别处）时一键指定，无需手改 JSON。
+    """
+    if request.method == "GET":
+        return jsonify({"ok": True, **site_dir_info()})
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("path") or request.form.get("path", "")
+    saved = set_site_dir(raw)
+    if not saved:
+        return jsonify({"ok": False,
+                        "message": "路径不存在或为空（请选择站点仓库所在的文件夹，"
+                                   "即含 index.html / data 的那个目录）"})
+    return jsonify({"ok": True, "site": saved,
+                    "message": f"已保存站点目录：{saved}"})
+
+
 def register(app):
     """把本模块的视图注册到 Flask 应用。
 
@@ -424,3 +453,5 @@ def register(app):
     app.add_url_rule('/restore', 'restore_json', restore_json, methods=['POST'])
     app.add_url_rule('/export', 'export_json', export_json)
     app.add_url_rule('/publish', 'publish_online', publish_online, methods=['POST'])
+    app.add_url_rule('/publish/site', 'publish_site_dir', publish_site_dir,
+                     methods=['GET', 'POST'])
